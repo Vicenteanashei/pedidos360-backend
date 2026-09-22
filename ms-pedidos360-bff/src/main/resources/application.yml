@@ -1,0 +1,21 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: ms-pedidos360-bff
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Token v2 de Entra ID (requestedAccessTokenVersion: 2 en el manifest de la API).
+          # Con v1 el issuer seria https://sts.windows.net/<tenant>/ y la validacion falla.
+          issuer-uri: https://login.microsoftonline.com/${ENTRA_TENANT_ID}/v2.0
+          # Audiencia = Client ID del registro de la API
+          audiences: ${API_CLIENT_ID}
+
+app:
+  services:
+    orders-url: ${ORDERS_URL:http://localhost:8081}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

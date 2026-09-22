@@ -1,0 +1,77 @@
+# Microservicios Pedidos360 (VM ec2-apps)
+# Uso (desde la raiz del repo): docker compose -f infra/apps/compose.yml up -d --build
+# Variables opcionales en infra/apps/.env (ver .env.example). Sin .env usa los valores por defecto.
+#
+# Solo el BFF publica puerto. Oracle y los microservicios quedan en la red interna
+# "pedidos360": se hablan por nombre de servicio y no son alcanzables desde afuera.
+
+services:
+  oracle:
+    # Oracle Free para desarrollo. En la nube se reemplaza por la BD cloud cambiando DB_URL.
+    image: gvenzl/oracle-free:23-slim-faststart
+    container_name: pedidos360-oracle
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_ADMIN_PASSWORD:-Admin123}
+      APP_USER: ${DB_USERNAME:-pedidos360}
+      APP_USER_PASSWORD: ${DB_PASSWORD:-pedidos360}
+    # Descomentar solo para inspeccionar la base desde el equipo (SQL Developer, DBeaver)
+    # ports:
+    #   - "1521:1521"
+    volumes:
+      - oradata:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - pedidos360
+
+  orders:
+    build: ../../ms-pedidos360-orders
+    image: pedidos360/ms-orders:latest
+    container_name: ms-pedidos360-orders
+    # Sin "ports": solo el BFF lo llama por la red interna (http://orders:8081)
+    expose:
+      - "8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: oracle
+      TZ: America/Santiago
+      DB_URL: ${DB_URL:-jdbc:oracle:thin:@//oracle:1521/FREEPDB1}
+      DB_USERNAME: ${DB_USERNAME:-pedidos360}
+      DB_PASSWORD: ${DB_PASSWORD:-pedidos360}
+    depends_on:
+      oracle:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pedidos360
+
+  bff:
+    build: ../../ms-pedidos360-bff
+    image: pedidos360/ms-bff:latest
+    container_name: ms-pedidos360-bff
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: America/Santiago
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-9d7e1df5-4b2b-4f57-944c-0ea679424efd}
+      API_CLIENT_ID: ${API_CLIENT_ID:-88e22461-0dce-4446-8509-c6eec7da2c02}
+      ORDERS_URL: http://orders:8081
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      # DEBUG para diagnosticar 401/403 (muestra las authorities del token)
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: ${SECURITY_LOG_LEVEL:-INFO}
+    depends_on:
+      - orders
+    restart: unless-stopped
+    networks:
+      - pedidos360
+
+volumes:
+  oradata:
+
+networks:
+  pedidos360:
+    name: pedidos360

@@ -1,0 +1,28 @@
+#!/bin/sh
+# Maven Wrapper simplificado (no necesita la carpeta .mvn).
+# Usa "mvn" si esta instalado; si no, descarga Maven una sola vez en ~/.m2/wrapper.
+set -e
+MAVEN_VERSION=3.9.9
+
+if command -v mvn >/dev/null 2>&1; then
+  exec mvn "$@"
+fi
+
+WRAPPER_DIR="$HOME/.m2/wrapper"
+MAVEN_DIR="$WRAPPER_DIR/apache-maven-$MAVEN_VERSION"
+
+if [ ! -x "$MAVEN_DIR/bin/mvn" ]; then
+  echo "Descargando Maven $MAVEN_VERSION en $WRAPPER_DIR ..."
+  mkdir -p "$WRAPPER_DIR"
+  URL="https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/$MAVEN_VERSION/apache-maven-$MAVEN_VERSION-bin.tar.gz"
+  TMP="$WRAPPER_DIR/apache-maven-$MAVEN_VERSION.tar.gz"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$URL" -o "$TMP"
+  else
+    wget -q "$URL" -O "$TMP"
+  fi
+  tar -xzf "$TMP" -C "$WRAPPER_DIR"
+  rm -f "$TMP"
+fi
+
+exec "$MAVEN_DIR/bin/mvn" "$@"
