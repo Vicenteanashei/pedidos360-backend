@@ -165,7 +165,7 @@ Con token (Vicente te puede pasar uno desde la página de prueba o desde el fron
 ```bash
 TOKEN="eyJ..."   # no lo compartas en ningún lado, dura ~1 hora
 curl -i -H "Authorization: Bearer $TOKEN" https://<id>.execute-api.<region>.amazonaws.com/api/orders
-# 200 → []   (o 403 si el usuario no tiene rol)
+# 200 → []
 ```
 
 | Resultado | Significa |
@@ -173,7 +173,7 @@ curl -i -H "Authorization: Bearer $TOKEN" https://<id>.execute-api.<region>.amaz
 | 401 sin token | ✔ El Gateway protege la API |
 | 200 con token | ✔ Todo el flujo funciona |
 | 401 con token | El issuer o la audiencia del autorizador están mal escritos |
-| 403 con token | El token es válido pero el usuario no tiene rol en Azure (lo arregla Vicente) |
+| 403 con token | El token no trae el permiso `access_as_user` de la API |
 | 503 / timeout | El Gateway no llega a la EC2: revisa la Elastic IP en la integración y el puerto 8080 del Security Group |
 
 ---

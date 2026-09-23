@@ -6,9 +6,9 @@ Lo desarrollamos para la Evaluación Final Transversal de **Desarrollo Cloud Nat
 
 ## Qué hay en este repo
 
-- **`frontend-pedidos360`**: la aplicación web, hecha en React. El usuario inicia sesión con su cuenta de Microsoft y ve opciones distintas según su rol.
+- **`frontend-pedidos360`**: la aplicación web, hecha en React. El usuario inicia sesión con su cuenta de Microsoft, revisa su token y lo prueba contra el backend.
 - **`ms-pedidos360-orders`**: el corazón del sistema. Aquí se crean, consultan, editan y eliminan los pedidos, y se controla que cada cambio de estado tenga sentido.
-- **`ms-pedidos360-bff`**: la puerta de entrada. Es el único servicio que recibe llamadas desde afuera. Revisa que quien llama haya iniciado sesión con Microsoft y que su rol le permita hacer lo que está pidiendo. Si todo está en orden, le pasa la solicitud al microservicio que corresponde.
+- **`ms-pedidos360-bff`**: la puerta de entrada. Es el único servicio que recibe llamadas desde afuera. Revisa que quien llama traiga un token válido de Microsoft. Si todo está en orden, le pasa la solicitud al microservicio que corresponde.
 - **`infra/apps/compose.yml`**: levanta todo el backend con un solo comando (la base de datos Oracle, orders y el BFF).
 - **`docs/GUIA-AWS.md`**: la guía paso a paso para desplegar en AWS (EC2 + API Gateway).
 
@@ -20,7 +20,7 @@ Así viaja un pedido desde que el usuario hace clic hasta que llega a la base de
 
 ```
 Front React (MSAL)  ── token ──▶  API Gateway  ──▶  ms-pedidos360-bff :8080
-                                                        │ revisa el token y el rol
+                                                        │ revisa el token      
                                                         ▼ (red interna de Docker)
                                          ms-pedidos360-orders :8081  ──▶  Oracle
 ```
@@ -28,24 +28,21 @@ Front React (MSAL)  ── token ──▶  API Gateway  ──▶  ms-pedidos36
 1. El usuario inicia sesión con su cuenta de Microsoft (Entra ID) y el frontend recibe un token.
 2. Cada llamada al backend va con ese token.
 3. En AWS, el API Gateway hace un primer filtro y rechaza los tokens inválidos. En local nos saltamos este paso y el front le habla directo al BFF.
-4. El BFF vuelve a validar el token y revisa el rol del usuario.
+4. El BFF vuelve a validar el token: firma, emisor, audiencia, vigencia y que traiga el permiso `access_as_user`.
 5. Orders hace el trabajo y guarda en Oracle.
 
 Orders y la base de datos no quedan expuestos hacia afuera, porque solo el BFF puede hablar con ellos.
 
-## Roles y permisos
+## Seguridad
 
-Usamos tres roles, que se asignan a cada usuario en Azure:
+Para usar la API basta con haber iniciado sesión: no se usan roles. El BFF solo deja pasar una llamada si trae un token de Microsoft que sea válido para esta API:
 
-| Acción | Cliente | Operador | Admin |
-|---|:---:|:---:|:---:|
-| Ver pedidos | ✔ | ✔ | ✔ |
-| Crear un pedido | ✔ | ✔ | |
-| Editar un pedido (solo si sigue en `CREADO`) | ✔ | ✔ | |
-| Cambiar el estado de un pedido | | ✔ | ✔ |
-| Eliminar un pedido | | | ✔ |
-
-Si alguien intenta algo que su rol no permite, recibe un **403**. Si ni siquiera inició sesión, recibe un **401**.
+| Situación | Respuesta del BFF |
+|---|---|
+| Sin token, o con un token inválido, vencido, de otro emisor o para otra audiencia | **401** |
+| Token válido pero sin el permiso `access_as_user` | **403** |
+| Ruta que no existe en el BFF | **403** |
+| Token válido | La llamada pasa a orders |
 
 ## El ciclo de vida de un pedido
 
@@ -77,7 +74,7 @@ Para comprobar que está funcionando:
 # Sin token: debería responder 401
 curl -i http://localhost:8080/api/orders
 
-# Con un token real de Microsoft: 200 (o 403 si tu rol no alcanza)
+# Con un token real de Microsoft: 200
 curl -i -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/orders
 ```
 
@@ -94,15 +91,11 @@ Queda en `http://localhost:8081` y puedes probar todos los endpoints desde Swagg
 
 ## El frontend
 
-Es una sola página con secciones numeradas. Las tres primeras muestran el login por dentro: (1) iniciar sesión con Microsoft, (2) revisar el token (emisor, audiencia, scope y roles, con sus datos) y (3) probarlo contra el backend (401 sin token, 200 con token). Después vienen (4) un resumen y (5) los pedidos, que cambian según el rol:
+Es una sola página con tres secciones que muestran el login por dentro:
 
-- **Admin**: un panel con indicadores (pedidos totales, en curso, ventas entregadas y lead time promedio) y el detalle por estado. Puede mover pedidos por el flujo y eliminarlos.
-- **Operador**: ve los pedidos nuevos y los acepta con un clic, sigue los que están en curso, crea y edita pedidos y los avanza hasta la entrega.
-- **Cliente**: ve solo sus pedidos, hace pedidos nuevos eligiendo local y productos, los edita mientras no hayan sido aceptados y sigue su estado.
-
-Si un usuario entra sin rol asignado, la app se lo avisa y le explica qué pedir. Los botones se muestran según el rol, pero quien realmente decide es el BFF: aunque alguien fuerce una llamada, el backend responde 403.
-
-Mientras no exista el microservicio de catálogo, los locales y productos vienen de una lista provisional en `src/constants/catalog.js`.
+1. **Iniciar sesión**: botón para entrar con Microsoft y cerrar sesión.
+2. **¿El token viene bien?**: comprueba el emisor, la audiencia y el scope del access token, y muestra sus datos (usuario, nombre, iss, aud, scp y expiración). También permite copiar el token para probarlo con `curl`.
+3. **Probar contra el BFF**: llama a `/api/orders` sin token (esperado **401**) y con token (esperado **200**) y muestra la respuesta.
 
 Para levantarlo necesitas Node.js 20 o superior, y el backend corriendo:
 
@@ -135,8 +128,6 @@ El login lo maneja Microsoft Entra ID, en el tenant `vicho1.onmicrosoft.com`. Pa
 
 - En el manifest, `requestedAccessTokenVersion` tiene que estar en `2`. Si queda en 1, el token llega con otro emisor y todas las llamadas fallan con 401.
 - Tiene que exponer el permiso `access_as_user`.
-- Tiene que tener creados los roles `Admin`, `Operador` y `Cliente`, escritos exactamente así.
-- Cada usuario necesita un rol asignado. Eso se hace en **Aplicaciones empresariales → (la API) → Usuarios y grupos**.
 
 Estos son los valores que usa el BFF para validar el token:
 
@@ -148,7 +139,7 @@ Estos son los valores que usa el BFF para validar el token:
 
 ## Tests
 
-Cada microservicio tiene sus propias pruebas. Las de orders recorren el ciclo completo de un pedido y comprueban la regla de "no despachar sin aceptar". Las del BFF comprueban que se responda 401 sin sesión y 403 cuando el rol no corresponde.
+Cada microservicio tiene sus propias pruebas. Las de orders recorren el ciclo completo de un pedido y comprueban la regla de "no despachar sin aceptar". Las del BFF comprueban que se responda 401 sin token y 403 cuando el token no trae el permiso de la API.
 
 ```bash
 cd ms-pedidos360-orders && sh mvnw test
