@@ -2,9 +2,11 @@
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /app
 
+# Instala curl: el mvnw simplificado de este repo descarga Maven con curl
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # Dependencias primero para aprovechar la cache de capas
 COPY mvnw pom.xml ./
-COPY .mvn .mvn
 RUN chmod +x mvnw && ./mvnw -q -B dependency:go-offline
 
 COPY src src
