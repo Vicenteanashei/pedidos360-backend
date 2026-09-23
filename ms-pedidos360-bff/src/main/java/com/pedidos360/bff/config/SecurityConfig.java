@@ -28,7 +28,8 @@ public class SecurityConfig {
 			.authorizeHttpRequests(auth -> auth
 				// Preflight CORS del navegador (no lleva token)
 				.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-				// Pedidos: cualquier usuario con un token valido para la API
+				// Prueba del tutorial y pedidos: cualquier usuario con un token valido para la API
+				.requestMatchers(HttpMethod.GET, "/api/data").hasAuthority(SCOPE)
 				.requestMatchers("/api/orders", "/api/orders/**").hasAuthority(SCOPE)
 				// Todo lo demas se rechaza
 				.anyRequest().denyAll())

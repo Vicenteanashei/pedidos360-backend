@@ -6,11 +6,12 @@ Lo desarrollamos para la Evaluación Final Transversal de **Desarrollo Cloud Nat
 
 ## Qué hay en este repo
 
-- **`frontend-pedidos360`**: la aplicación web, hecha en React. El usuario inicia sesión con su cuenta de Microsoft, revisa su token y lo prueba contra el backend.
 - **`ms-pedidos360-orders`**: el corazón del sistema. Aquí se crean, consultan, editan y eliminan los pedidos, y se controla que cada cambio de estado tenga sentido.
 - **`ms-pedidos360-bff`**: la puerta de entrada. Es el único servicio que recibe llamadas desde afuera. Revisa que quien llama traiga un token válido de Microsoft. Si todo está en orden, le pasa la solicitud al microservicio que corresponde.
 - **`infra/apps/compose.yml`**: levanta todo el backend con un solo comando (la base de datos Oracle, orders y el BFF).
 - **`docs/GUIA-AWS.md`**: la guía paso a paso para desplegar en AWS (EC2 + API Gateway).
+
+El frontend (React) está en su propio repositorio: **`pedidos360-frontend`**.
 
 Todavía faltan el catálogo de productos, las notificaciones con RabbitMQ y la auditoría y reportería con Kafka. Los vamos a ir agregando en este mismo repo.
 
@@ -91,23 +92,17 @@ Queda en `http://localhost:8081` y puedes probar todos los endpoints desde Swagg
 
 ## El frontend
 
-Es una sola página con tres secciones que muestran el login por dentro:
+El frontend está en un repositorio aparte, **`pedidos360-frontend`**. Allí se explica cómo levantarlo. Por defecto le habla al BFF en `http://localhost:8080`, y el BFF acepta llamadas desde `http://localhost:5173` (se cambia con `CORS_ALLOWED_ORIGINS`).
 
-1. **Iniciar sesión**: botón para entrar con Microsoft y cerrar sesión.
-2. **¿El token viene bien?**: comprueba el emisor, la audiencia y el scope del access token, y muestra sus datos (usuario, nombre, iss, aud, scp y expiración). También permite copiar el token para probarlo con `curl`.
-3. **Probar contra el BFF**: llama a `/api/orders` sin token (esperado **401**) y con token (esperado **200**) y muestra la respuesta.
+## Endpoint de prueba del BFF
 
-Para levantarlo necesitas Node.js 20 o superior, y el backend corriendo:
+`GET /api/data` responde **200** con `{ "mensaje": "Acceso autorizado a Spring Boot", ... }` si el token es válido, y **401** si no hay token o es inválido. Es la prueba del tutorial para comprobar el login de punta a punta:
 
 ```bash
-cd frontend-pedidos360
-npm install
-npm run dev
+read -rsp "Pegue el access token de prueba: " tokenPrueba; echo
+curl -i -H "Authorization: Bearer $tokenPrueba" http://localhost:8080/api/data
+unset tokenPrueba
 ```
-
-Queda en `http://localhost:5173` y le habla al BFF en `http://localhost:8080`. Los IDs de Azure ya vienen configurados; si quieres apuntar a otro backend (por ejemplo, el API Gateway en AWS), crea `frontend-pedidos360/.env.local` con `VITE_API_BASE_URL=<url>` (hay un ejemplo en `.env.example`).
-
-En Azure, el registro de la SPA tiene que tener como URI de redirección `http://localhost:5173/redirect.html` (plataforma "Aplicación de página única").
 
 ## Endpoints de pedidos
 
