@@ -94,7 +94,7 @@ Queda en `http://localhost:8081` y puedes probar todos los endpoints desde Swagg
 
 ## El frontend
 
-Cada rol ve una aplicación distinta:
+Es una sola página con secciones numeradas. Las tres primeras muestran el login por dentro: (1) iniciar sesión con Microsoft, (2) revisar el token (emisor, audiencia, scope y roles, con sus datos) y (3) probarlo contra el backend (401 sin token, 200 con token). Después vienen (4) un resumen y (5) los pedidos, que cambian según el rol:
 
 - **Admin**: un panel con indicadores (pedidos totales, en curso, ventas entregadas y lead time promedio) y el detalle por estado. Puede mover pedidos por el flujo y eliminarlos.
 - **Operador**: ve los pedidos nuevos y los acepta con un clic, sigue los que están en curso, crea y edita pedidos y los avanza hasta la entrega.

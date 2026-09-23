@@ -5,13 +5,11 @@ import { tokenRequest } from './authConfig';
 import { decodeClaims, getAccessToken } from './token';
 import { ROLES } from './roles';
 import { setTokenProvider } from '../api/http';
-import LoginPage from './LoginPage';
 
 const message = (e) => (e instanceof Error ? e.message : String(e));
 
-// Sin cuenta muestra el login. Con cuenta obtiene el access token, lee los roles
-// y registra el token para que cada llamada al backend lo lleve.
-export default function AuthGate({ children }) {
+// Estado de la sesion con Entra ID: cuenta, roles del access token, login/logout y token para las llamadas
+export function useSession() {
   const { instance, accounts, inProgress } = useMsal();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -48,30 +46,16 @@ export default function AuthGate({ children }) {
     }
   }
 
-  const logout = () => instance.logoutPopup({ account });
-
-  if (!account) {
-    return <LoginPage onLogin={login} busy={busy || inProgress !== InteractionStatus.None} error={error} />;
-  }
-  if (roles === null) {
-    return error ? <LoginPage onLogin={login} busy={false} error={error} /> : <div className="loading">Cargando sesión…</div>;
-  }
-  if (roles.length === 0) {
-    return (
-      <div className="login-screen">
-        <div className="login-card">
-          <div className="brand-big">🥐 Pedidos360</div>
-          <h3>Tu usuario no tiene un rol asignado</h3>
-          <p className="muted">
-            Iniciaste sesión como <b>{account.username}</b>, pero para usar la plataforma necesitas el rol
-            Admin, Operador o Cliente. Pídele al administrador que te lo asigne en Entra ID (Aplicaciones
-            empresariales → API → Usuarios y grupos) y vuelve a entrar.
-          </p>
-          <button className="btn" onClick={logout}>Cerrar sesión</button>
-        </div>
-      </div>
-    );
-  }
-
-  return children({ name: account.name || account.username, username: account.username, roles, logout });
+  return {
+    account,
+    name: account ? account.name || account.username : '',
+    username: account?.username ?? '',
+    roles: roles ?? [],
+    rolesLoaded: roles !== null,
+    busy: busy || inProgress !== InteractionStatus.None,
+    error,
+    login,
+    logout: () => instance.logoutPopup({ account }),
+    getToken: () => getAccessToken(instance, account),
+  };
 }

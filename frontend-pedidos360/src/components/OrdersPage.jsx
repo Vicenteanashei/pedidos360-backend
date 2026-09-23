@@ -25,7 +25,6 @@ export default function OrdersPage({ session, perms, onlyMine, openTarget }) {
   return (
     <div className="orders-page">
       <div className="page-head">
-        <h2>{onlyMine ? 'Mis pedidos' : 'Pedidos'}</h2>
         {perms.crearPedido && (
           <button className="btn primary" onClick={() => setPanel({ mode: 'new' })}>+ Nuevo pedido</button>
         )}

@@ -160,7 +160,6 @@ export default function Dashboard({ session, perms, onlyMine, goToOrders }) {
 
   return (
     <div>
-      <h2>Hola, {session.name.split(' ')[0]} 👋</h2>
       {loading && <p className="muted">Cargando…</p>}
       {error && <p className="error">{error}</p>}
       {!loading && !error && (
