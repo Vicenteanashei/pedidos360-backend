@@ -1,0 +1,45 @@
+server:
+  port: ${SERVER_PORT:8084}
+spring:
+  application:
+    name: ms-pedidos360-rabbit-admin
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${ENTRA_ISSUER_URI:https://login.microsoftonline.com/${ENTRA_TENANT_ID}/v2.0}
+          audiences: ${API_CLIENT_ID}
+  rabbitmq:
+    addresses: ${RABBITMQ_ADDRESSES:localhost:5672}
+    username: ${RABBITMQ_USER:pedidos360}
+    password: ${RABBITMQ_PASSWORD}
+    virtual-host: ${RABBITMQ_VHOST:/pedidos360}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        prefetch: 10
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1s
+          multiplier: 2
+          max-interval: 4s
+management:
+  health:
+    rabbit:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+app:
+  rabbit-management-user: ${RABBIT_ADMIN_USER:mqadmin}
+  rabbit-management-password: ${RABBIT_ADMIN_PASSWORD}
+  rabbit-management-url: ${RABBIT_MANAGEMENT_URL:http://localhost:15672}
