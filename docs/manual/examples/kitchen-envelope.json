@@ -1,0 +1,25 @@
+{
+  "eventId": "9b4815da-b2ab-4eda-9abe-dbe8d73e8002",
+  "type": "kitchen.ticket",
+  "timestamp": "2026-10-22T12:00:00Z",
+  "correlationId": "9b4815da-b2ab-4eda-9abe-dbe8d73e8002",
+  "ownerId": "tenant-ficticio:cliente-ficticio",
+  "payload": {
+    "id": 501,
+    "storeId": 1,
+    "customerName": "Cliente académico",
+    "customerEmail": "cliente@example.test",
+    "deliveryAddress": "Dirección ficticia",
+    "notes": "Ejemplo de contrato; usar UUID nuevo al publicar otra tarea",
+    "status": "ACEPTADO",
+    "total": 2200,
+    "items": [
+      {
+        "productId": 1,
+        "quantity": 1,
+        "unitPrice": 2200,
+        "subtotal": 2200
+      }
+    ]
+  }
+}

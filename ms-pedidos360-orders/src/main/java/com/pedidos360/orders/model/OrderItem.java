@@ -1,11 +1,10 @@
 package com.pedidos360.orders.model;
 
 import jakarta.persistence.*;
+import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.math.BigDecimal;
 
 /** Producto del pedido. productId referencia a ms-pedidos360-catalog. */
 @Entity
@@ -15,24 +14,24 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 public class OrderItem {
 
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-	@ManyToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "ORDER_ID")
-	private CustomerOrder order;
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "ORDER_ID")
+  private CustomerOrder order;
 
-	@Column(nullable = false)
-	private Long productId;
+  @Column(nullable = false)
+  private Long productId;
 
-	@Column(nullable = false)
-	private Integer quantity;
+  @Column(nullable = false)
+  private Integer quantity;
 
-	@Column(nullable = false, precision = 12, scale = 2)
-	private BigDecimal unitPrice;
+  @Column(nullable = false, precision = 12, scale = 2)
+  private BigDecimal unitPrice;
 
-	public BigDecimal subtotal() {
-		return unitPrice.multiply(BigDecimal.valueOf(quantity));
-	}
+  public BigDecimal subtotal() {
+    return unitPrice.multiply(BigDecimal.valueOf(quantity));
+  }
 }

@@ -1,0 +1,1319 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Preparacion EA1/EA2: HTTPS frontend y API Gateway JWT con integracion privada a las EC2 existentes. No incluye secretos ni crea instancias. Revisar permisos/costo y change set antes de ejecutar.",
+  "Parameters": {
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id",
+      "Description": "VPC de las tres EC2 existentes"
+    },
+    "SubnetA": {
+      "Type": "AWS::EC2::Subnet::Id",
+      "Description": "Primera subnet del VPC"
+    },
+    "SubnetB": {
+      "Type": "AWS::EC2::Subnet::Id",
+      "Description": "Segunda subnet del mismo VPC, otra zona de disponibilidad"
+    },
+    "BackendInstanceId": {
+      "Type": "AWS::EC2::Instance::Id",
+      "Description": "EC2 backend existente; no crea otra instancia"
+    },
+    "BackendSecurityGroupId": {
+      "Type": "AWS::EC2::SecurityGroup::Id"
+    },
+    "FrontendSecurityGroupId": {
+      "Type": "AWS::EC2::SecurityGroup::Id"
+    },
+    "FrontendPublicDns": {
+      "Type": "String",
+      "AllowedPattern": "ec2-[a-zA-Z0-9.-]+\\.compute(-[0-9]+)?\\.amazonaws\\.com",
+      "Description": "DNS publico actual de EC2 frontend; revisar tras reanudar Lab"
+    },
+    "CloudFrontOriginPrefixListId": {
+      "Type": "String",
+      "AllowedPattern": "pl-[a-f0-9]+",
+      "Description": "Lista administrada com.amazonaws.global.cloudfront.origin-facing de esta region"
+    },
+    "TenantId": {
+      "Type": "String",
+      "AllowedPattern": "[0-9a-fA-F-]{36}"
+    },
+    "ApiClientId": {
+      "Type": "String",
+      "AllowedPattern": "[0-9a-fA-F-]{36}"
+    }
+  },
+  "Rules": {
+    "DifferentSubnets": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Not": [
+              {
+                "Fn::Equals": [
+                  {
+                    "Ref": "SubnetA"
+                  },
+                  {
+                    "Ref": "SubnetB"
+                  }
+                ]
+              }
+            ]
+          },
+          "AssertDescription": "Seleccionar dos subnets distintas; verificar tambien que sus AZ sean distintas."
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "AlbSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "ALB interno: solo VPC Link hacia BFF existente",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 8080,
+            "ToPort": 8080,
+            "DestinationSecurityGroupId": {
+              "Ref": "BackendSecurityGroupId"
+            }
+          }
+        ]
+      }
+    },
+    "VpcLinkSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "API Gateway VPC Link: solo ALB interno",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "DestinationSecurityGroupId": {
+              "Ref": "AlbSG"
+            }
+          }
+        ]
+      }
+    },
+    "AllowLinkToAlb": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "AlbSG"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 80,
+        "ToPort": 80,
+        "SourceSecurityGroupId": {
+          "Ref": "VpcLinkSG"
+        }
+      }
+    },
+    "AllowAlbToBff": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "BackendSecurityGroupId"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 8080,
+        "ToPort": 8080,
+        "SourceSecurityGroupId": {
+          "Ref": "AlbSG"
+        },
+        "Description": "Pedidos360 API Gateway via ALB privado"
+      }
+    },
+    "AllowCloudFrontToFrontend": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "FrontendSecurityGroupId"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 80,
+        "ToPort": 80,
+        "SourcePrefixListId": {
+          "Ref": "CloudFrontOriginPrefixListId"
+        },
+        "Description": "Origen frontend estatico solo desde CloudFront"
+      }
+    },
+    "InternalAlb": {
+      "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "Properties": {
+        "Scheme": "internal",
+        "Type": "application",
+        "Subnets": [
+          {
+            "Ref": "SubnetA"
+          },
+          {
+            "Ref": "SubnetB"
+          }
+        ],
+        "SecurityGroups": [
+          {
+            "Ref": "AlbSG"
+          }
+        ]
+      }
+    },
+    "BffTargetGroup": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "TargetType": "instance",
+        "Port": 8080,
+        "Protocol": "HTTP",
+        "HealthCheckPath": "/actuator/health",
+        "Matcher": {
+          "HttpCode": "200"
+        },
+        "Targets": [
+          {
+            "Id": {
+              "Ref": "BackendInstanceId"
+            },
+            "Port": 8080
+          }
+        ]
+      }
+    },
+    "AlbListener": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "LoadBalancerArn": {
+          "Ref": "InternalAlb"
+        },
+        "Port": 80,
+        "Protocol": "HTTP",
+        "DefaultActions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {
+              "Ref": "BffTargetGroup"
+            }
+          }
+        ]
+      }
+    },
+    "ApiVpcLink": {
+      "Type": "AWS::ApiGatewayV2::VpcLink",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-link"
+        },
+        "SubnetIds": [
+          {
+            "Ref": "SubnetA"
+          },
+          {
+            "Ref": "SubnetB"
+          }
+        ],
+        "SecurityGroupIds": [
+          {
+            "Ref": "VpcLinkSG"
+          }
+        ]
+      }
+    },
+    "FrontendDistribution": {
+      "Type": "AWS::CloudFront::Distribution",
+      "Properties": {
+        "DistributionConfig": {
+          "Enabled": true,
+          "Comment": "Pedidos360 EA2 frontend HTTPS",
+          "DefaultRootObject": "index.html",
+          "PriceClass": "PriceClass_100",
+          "Origins": [
+            {
+              "Id": "ec2-frontend",
+              "DomainName": {
+                "Ref": "FrontendPublicDns"
+              },
+              "CustomOriginConfig": {
+                "HTTPPort": 80,
+                "OriginProtocolPolicy": "http-only"
+              }
+            }
+          ],
+          "DefaultCacheBehavior": {
+            "TargetOriginId": "ec2-frontend",
+            "ViewerProtocolPolicy": "redirect-to-https",
+            "AllowedMethods": [
+              "GET",
+              "HEAD"
+            ],
+            "CachedMethods": [
+              "GET",
+              "HEAD"
+            ],
+            "Compress": true,
+            "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+          },
+          "ViewerCertificate": {
+            "CloudFrontDefaultCertificate": true
+          },
+          "HttpVersion": "http2"
+        }
+      }
+    },
+    "HttpApi": {
+      "Type": "AWS::ApiGatewayV2::Api",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-api"
+        },
+        "ProtocolType": "HTTP",
+        "CorsConfiguration": {
+          "AllowOrigins": [
+            {
+              "Fn::Sub": "https://${FrontendDistribution.DomainName}"
+            }
+          ],
+          "AllowMethods": [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "OPTIONS"
+          ],
+          "AllowHeaders": [
+            "Authorization",
+            "Content-Type",
+            "X-Correlation-Id"
+          ],
+          "ExposeHeaders": [
+            "X-Correlation-Id",
+            "Content-Disposition"
+          ],
+          "MaxAge": 300
+        }
+      }
+    },
+    "EntraAuthorizer": {
+      "Type": "AWS::ApiGatewayV2::Authorizer",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "Name": "Entra-access-token",
+        "AuthorizerType": "JWT",
+        "IdentitySource": [
+          "$request.header.Authorization"
+        ],
+        "JwtConfiguration": {
+          "Audience": [
+            {
+              "Ref": "ApiClientId"
+            }
+          ],
+          "Issuer": {
+            "Fn::Sub": "https://login.microsoftonline.com/${TenantId}/v2.0"
+          }
+        }
+      }
+    },
+    "BffIntegration": {
+      "Type": "AWS::ApiGatewayV2::Integration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "IntegrationType": "HTTP_PROXY",
+        "IntegrationMethod": "ANY",
+        "IntegrationUri": {
+          "Ref": "AlbListener"
+        },
+        "ConnectionType": "VPC_LINK",
+        "ConnectionId": {
+          "Ref": "ApiVpcLink"
+        },
+        "PayloadFormatVersion": "1.0",
+        "RequestParameters": {
+          "overwrite:path": "$request.path"
+        },
+        "TimeoutInMillis": 20000
+      }
+    },
+    "Route1": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/data",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route2": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/orders",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route3": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "POST /api/orders",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route4": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/orders/{id}",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route5": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "PUT /api/orders/{id}",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route6": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "DELETE /api/orders/{id}",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route7": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "PUT /api/orders/{id}/status",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route8": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/catalog/products",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route9": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "POST /api/catalog/products",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route10": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/catalog/products/{id}",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route11": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "PUT /api/catalog/products/{id}",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route12": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "DELETE /api/catalog/products/{id}",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route13": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/audit",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route14": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/reports",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route15": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/operators",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route16": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "PUT /api/operators",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route17": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "DELETE /api/operators/{actorId}",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route18": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/outbox",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route19": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "POST /api/outbox/{id}/retry",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route20": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/inventory-operations",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route21": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/notifications",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route22": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/notifications/{id}/artifact",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route23": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/rabbit/overview",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route24": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/rabbit/nodes",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route25": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/rabbit/queues",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route26": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/rabbit/exchanges",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route27": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/rabbit/bindings",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route28": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "POST /api/rabbit/queues",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route29": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "POST /api/rabbit/exchanges",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route30": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "POST /api/rabbit/bindings",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route31": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "DELETE /api/rabbit/queues/{name}",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route32": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "DELETE /api/rabbit/exchanges/{name}",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route33": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "DELETE /api/rabbit/bindings",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "Route34": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "POST /api/rabbit/queues/{name}/inspect",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
+    },
+    "ApiStage": {
+      "Type": "AWS::ApiGatewayV2::Stage",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "StageName": "$default",
+        "AutoDeploy": true,
+        "DefaultRouteSettings": {
+          "ThrottlingBurstLimit": 30,
+          "ThrottlingRateLimit": 20
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "FrontendUrl": {
+      "Value": {
+        "Fn::Sub": "https://${FrontendDistribution.DomainName}"
+      }
+    },
+    "RedirectUri": {
+      "Value": {
+        "Fn::Sub": "https://${FrontendDistribution.DomainName}/redirect.html"
+      }
+    },
+    "ApiUrl": {
+      "Value": {
+        "Fn::GetAtt": [
+          "HttpApi",
+          "ApiEndpoint"
+        ]
+      }
+    },
+    "DistributionId": {
+      "Value": {
+        "Ref": "FrontendDistribution"
+      }
+    },
+    "BffTargetGroupArn": {
+      "Value": {
+        "Ref": "BffTargetGroup"
+      }
+    },
+    "IntegrationStatus": {
+      "Value": "Verificar target healthy, CORS, Entra redirect y flujo; stack listo no prueba despliegue."
+    }
+  }
+}

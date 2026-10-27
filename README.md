@@ -1,144 +1,65 @@
-# Pedidos360
+# Pedidos360 backend
 
-Este es **Pedidos360**, una plataforma pensada para una red de 20 PyMEs (panaderías y cafés) que necesitan recibir pedidos por la web, coordinar la cocina y los despachos, y saber en todo momento en qué estado está cada pedido.
+Backend Java 21 y Spring Boot para gestión de pedidos, catálogo, stock, notificaciones, comprobantes, reportes y auditoría. La interfaz está en [pedidos360-frontend](https://github.com/Vicenteanashei/pedidos360-frontend).
 
-Lo desarrollamos para la Evaluación Final Transversal de **Desarrollo Cloud Native I (DSY1107)**. Está hecho con Spring Boot 3.5 y Java 21, separado en microservicios que corren en Docker.
+## Componentes
 
-## Qué hay en este repo
+- BFF: entrada de la API y comunicación con los microservicios.
+- Orders: pedidos, estados, reservas de stock, outbox, reportes y auditoría.
+- Catalog: productos, existencias y operaciones de inventario.
+- Notify: consumidores de correo, cocina y comprobantes; recibos idempotentes y artefactos.
+- Rabbit Admin: administración del broker protegida por el rol Admin.
+- p360-common: seguridad JWT, correlación y definición compartida de la topología.
 
-- **`ms-pedidos360-orders`**: el corazón del sistema. Aquí se crean, consultan, editan y eliminan los pedidos, y se controla que cada cambio de estado tenga sentido.
-- **`ms-pedidos360-bff`**: la puerta de entrada. Es el único servicio que recibe llamadas desde afuera. Revisa que quien llama traiga un token válido de Microsoft. Si todo está en orden, le pasa la solicitud al microservicio que corresponde.
-- **`infra/apps/compose.yml`**: levanta todo el backend con un solo comando (la base de datos Oracle, orders y el BFF).
-- **`docs/GUIA-AWS.md`**: la guía paso a paso para desplegar en AWS (EC2 + API Gateway).
+Oracle conserva los datos por servicio. RabbitMQ usa tres nodos, tres colas de tareas y tres DLQ, exchanges direct/topic y políticas DLX. Los consumidores confirman después de completar su transacción y limitan los reintentos. Las colas son classic durables; tres nodos no equivalen a tres réplicas de cada mensaje.
 
-El frontend (React) está en su propio repositorio: **`pedidos360-frontend`**.
+## Compilar y probar
 
-Todavía faltan el catálogo de productos, las notificaciones con RabbitMQ y la auditoría y reportería con Kafka. Los vamos a ir agregando en este mismo repo.
-
-## Cómo funciona
-
-Así viaja un pedido desde que el usuario hace clic hasta que llega a la base de datos:
-
-```
-Front React (MSAL)  ── token ──▶  API Gateway  ──▶  ms-pedidos360-bff :8080
-                                                        │ revisa el token      
-                                                        ▼ (red interna de Docker)
-                                         ms-pedidos360-orders :8081  ──▶  Oracle
-```
-
-1. El usuario inicia sesión con su cuenta de Microsoft (Entra ID) y el frontend recibe un token.
-2. Cada llamada al backend va con ese token.
-3. En AWS, el API Gateway hace un primer filtro y rechaza los tokens inválidos. En local nos saltamos este paso y el front le habla directo al BFF.
-4. El BFF vuelve a validar el token: firma, emisor, audiencia, vigencia y que traiga el permiso `access_as_user`.
-5. Orders hace el trabajo y guarda en Oracle.
-
-Orders y la base de datos no quedan expuestos hacia afuera, porque solo el BFF puede hablar con ellos.
-
-## Seguridad
-
-Para usar la API basta con haber iniciado sesión: no se usan roles. El BFF solo deja pasar una llamada si trae un token de Microsoft que sea válido para esta API:
-
-| Situación | Respuesta del BFF |
-|---|---|
-| Sin token, o con un token inválido, vencido, de otro emisor o para otra audiencia | **401** |
-| Token válido pero sin el permiso `access_as_user` | **403** |
-| Ruta que no existe en el BFF | **403** |
-| Token válido | La llamada pasa a orders |
-
-## El ciclo de vida de un pedido
-
-```
-CREADO → ACEPTADO → EN_PREPARACION → DESPACHADO → ENTREGADO
-```
-
-Un pedido se puede **cancelar** en cualquier momento antes de ser entregado. La regla más importante del caso es que **no se puede despachar un pedido que no fue aceptado**. Si alguien lo intenta, el sistema responde con un **409** y explica qué estados son válidos desde el actual.
-
-Además guardamos la fecha en que el pedido se aceptó, se despachó y se entregó. Con eso después vamos a calcular el *lead time* (cuánto se demora un pedido desde que se crea hasta que se entrega).
-
-## Levantarlo en tu computador
-
-### Con Docker (la forma recomendada)
-
-Solo necesitas Docker instalado. Desde la raíz del repo:
+Requisitos: Java 21 y acceso a los repositorios Maven. Desde la raíz:
 
 ```bash
-docker compose -f infra/apps/compose.yml up -d --build
+sh ms-pedidos360-orders/mvnw -f pom.xml package
 ```
 
-La primera vez se demora un poco: hay que descargar Oracle y compilar los servicios. Oracle tarda cerca de un minuto en quedar lista, y orders espera a que esté disponible antes de arrancar.
+## Configuración y despliegue
 
-No hace falta configurar nada más, porque el compose ya trae los datos de Azure y claves de desarrollo. Si quieres cambiar algo (por ejemplo, apuntar a la base de datos en la nube o poner contraseñas reales en el servidor), copia `infra/apps/.env.example` como `infra/apps/.env` y edítalo. Ese archivo nunca se sube a GitHub.
-
-Para comprobar que está funcionando:
+Crear el archivo privado de configuración y completar los valores propios:
 
 ```bash
-# Sin token: debería responder 401
-curl -i http://localhost:8080/api/orders
-
-# Con un token real de Microsoft: 200
-curl -i -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/orders
+cp infra/.env.example infra/.env
+chmod 600 infra/.env
 ```
 
-### Sin Docker (para programar más rápido)
+Configurar tenant y aplicación API de Entra, credenciales de Oracle/Rabbit, clave interna, orígenes CORS y direcciones privadas del broker. La API valida JWT, audiencia, scope y los roles Admin, Operador, Cliente y Auditor.
 
-Orders también puede correr solo, con una base de datos en memoria (H2), así no tienes que levantar Oracle:
+Los archivos Compose separan los hosts backend/Oracle y Rabbit; el frontend tiene su propio repositorio y host. Con Docker, Compose y Buildx disponibles, ejecutar en cada host correspondiente:
 
 ```bash
-cd ms-pedidos360-orders
-sh mvnw spring-boot:run
+# Host Rabbit:
+bash scripts/deploy-host.sh rabbit infra/.env
+# Host backend, después de verificar Rabbit:
+bash scripts/deploy-host.sh backend infra/.env
 ```
 
-Queda en `http://localhost:8081` y puedes probar todos los endpoints desde Swagger en `http://localhost:8081/swagger-ui.html`.
+Para instalaciones existentes, seguir primero la [migración de políticas Rabbit](docs/MIGRACION-POLITICAS-RABBIT.md). No sustituir volúmenes ni cambiar sus credenciales al actualizar las fuentes.
 
-## El frontend
+Las plantillas de infra/aws permiten separar frontend, backend y Rabbit en tres EC2. La opción web-sin-cloudfront-lab.json utiliza API Gateway HTTPS con ALB/VPC Link privados y autorización JWT para las rutas API. Configurar parámetros de la cuenta propia y registrar el redirect SPA en Entra.
 
-El frontend está en un repositorio aparte, **`pedidos360-frontend`**. Allí se explica cómo levantarlo. Por defecto le habla al BFF en `http://localhost:8080`, y el BFF acepta llamadas desde `http://localhost:5173` (se cambia con `CORS_ALLOWED_ORIGINS`).
+## Comprobaciones
 
-## Endpoint de prueba del BFF
+El BFF expone /actuator/health. Los microservicios conservan sus endpoints de salud dentro de la red privada. La documentación OpenAPI mantiene protección de acceso.
 
-`GET /api/data` responde **200** con `{ "mensaje": "Acceso autorizado a Spring Boot", ... }` si el token es válido, y **401** si no hay token o es inválido. Es la prueba del tutorial para comprobar el login de punta a punta:
+En el host backend, con Management privado configurado:
 
 ```bash
-read -rsp "Pegue el access token de prueba: " tokenPrueba; echo
-curl -i -H "Authorization: Bearer $tokenPrueba" http://localhost:8080/api/data
-unset tokenPrueba
+python3 scripts/manual-rabbit-lab.py state
+python3 scripts/manual-rabbit-lab.py --help
 ```
 
-## Endpoints de pedidos
+Los helpers manual-api y manual-session permiten probar la API desde terminal leyendo el access token por entrada oculta. Las operaciones de administración usan recursos demo.* para conservar las colas del caso. La inspección DLQ reencola el mensaje.
 
-| Método | Ruta | Para qué sirve |
-|---|---|---|
-| POST | `/api/orders` | Crear un pedido nuevo (parte en `CREADO`) |
-| GET | `/api/orders/{id}` | Ver un pedido |
-| GET | `/api/orders?status=&from=&to=` | Listar pedidos, con filtro opcional por estado y fechas |
-| PUT | `/api/orders/{id}` | Editar un pedido que todavía no ha sido aceptado |
-| PUT | `/api/orders/{id}/status` | Cambiar el estado, por ejemplo `{ "status": "ACEPTADO" }` |
-| DELETE | `/api/orders/{id}` | Eliminar un pedido |
+## Archivos privados
 
-Las fechas de los filtros van en formato ISO, por ejemplo `2026-09-10T00:00:00`.
+Mantener fuera de Git los archivos .env reales, tokens, contraseñas, respuestas de pruebas, capturas, datos y respaldos. Los hooks usan scripts/verify-public.py y requieren Gitleaks. Los ejemplos de configuración contienen valores por completar.
 
-## Configuración en Azure (Entra ID)
-
-El login lo maneja Microsoft Entra ID, en el tenant `vicho1.onmicrosoft.com`. Para que el backend acepte los tokens, el registro de la API en Azure tiene que cumplir con esto:
-
-- En el manifest, `requestedAccessTokenVersion` tiene que estar en `2`. Si queda en 1, el token llega con otro emisor y todas las llamadas fallan con 401.
-- Tiene que exponer el permiso `access_as_user`.
-
-Estos son los valores que usa el BFF para validar el token:
-
-| | |
-|---|---|
-| Emisor (issuer) | `https://login.microsoftonline.com/<ENTRA_TENANT_ID>/v2.0` |
-| Audiencia | el Client ID del registro de la API |
-| Scope | `api://<API_CLIENT_ID>/access_as_user` |
-
-## Tests
-
-Cada microservicio tiene sus propias pruebas. Las de orders recorren el ciclo completo de un pedido y comprueban la regla de "no despachar sin aceptar". Las del BFF comprueban que se responda 401 sin token y 403 cuando el token no trae el permiso de la API.
-
-```bash
-cd ms-pedidos360-orders && sh mvnw test
-cd ms-pedidos360-bff && sh mvnw test
-```
-
-En Windows se usa `mvnw.cmd test`. Si no tienes Maven instalado no pasa nada: `mvnw` lo descarga la primera vez.
+El archivo .eml acredita preparación del correo; la entrega externa requiere configurar SMTP. Los comprobantes PDF son académicos, sin validez tributaria.

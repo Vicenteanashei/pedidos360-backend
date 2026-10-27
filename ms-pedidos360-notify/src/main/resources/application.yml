@@ -1,0 +1,75 @@
+server:
+  port: ${SERVER_PORT:8083}
+spring:
+  application:
+    name: ms-pedidos360-notify
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${ENTRA_ISSUER_URI:https://login.microsoftonline.com/${ENTRA_TENANT_ID}/v2.0}
+          audiences: ${API_CLIENT_ID}
+  rabbitmq:
+    addresses: ${RABBITMQ_ADDRESSES:localhost:5672}
+    username: ${RABBITMQ_USER:pedidos360}
+    password: ${RABBITMQ_PASSWORD}
+    virtual-host: ${RABBITMQ_VHOST:/pedidos360}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        prefetch: 10
+        default-requeue-rejected: false
+        acknowledge-mode: manual
+        # Retry decisions belong to TaskMessageProcessor; do not multiply attempts in the container.
+        retry:
+          enabled: false
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      mail.smtp.ssl.checkserveridentity: true
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
+  datasource:
+    url: ${DB_URL:jdbc:h2:file:./data/notify;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration/{vendor}
+    baseline-on-migrate: false
+management:
+  health:
+    mail:
+      enabled: ${MAIL_ENABLED:false}
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+  # Persistencia por servicio
+app:
+  mail:
+    enabled: ${MAIL_ENABLED:false}
+  messaging:
+    enabled: true
+    consumer:
+      max-attempts: 3
+      initial-delay: 1000
+      max-delay: 4000
+  artifacts: ${ARTIFACTS_DIR:./data/artifacts}
+  demo-failure-enabled: ${DEMO_FAILURE_ENABLED:false}

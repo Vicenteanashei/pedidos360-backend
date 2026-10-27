@@ -1,0 +1,10 @@
+**/target
+**/data
+.git
+**/.env
+**/.env.*
+**/*.log
+**/*.pem
+**/*.key
+**/*.pfx
+**/*.p12

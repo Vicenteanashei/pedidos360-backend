@@ -1,17 +1,34 @@
-# Material del docente (no se publica)
-*.pdf
+**/target/
+**/node_modules/
+**/dist/
+**/.env
+**/.env.local
+**/.env.*.local
+**/data/
+*.log
+manual-results/
+**/.env*
+!**/.env.example
+**/.aws/
+**/.azure/
+**/.ssh/
+**/__pycache__/
+*.pyc
+*.pem
+*.key
+*.p12
+*.pfx
+*.ppk
+*credentials*.txt
+*credenciales*.txt
+*apikeys*.txt
+*token*.txt
+public-results/
 
-# Secretos / variables de entorno
-.env
-*.env
-
-# Build e IDE
-target/
-.idea/
-.vscode/
-*.iml
-
-# Frontend
-node_modules/
-dist/
-.env.local
+# Internal notes remain local
+/docs/local/
+/docs/MATRIZ-RUBRICA.md
+/docs/DEFENSA-TERMINAL.md
+/docs/PUBLICACION-SEGURA.md
+/docs/ACTUALIZAR-TRES-NODOS.md
+/docs/manual/PRUEBAS-GUIAS-RABBIT.md

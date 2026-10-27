@@ -1,0 +1,17 @@
+import {writeFileSync} from 'node:fs';
+const base=(process.env.P360_API_URL||'http://localhost:8080').replace(/\/$/,'');
+const baseUrl=new URL(base);
+if (!['http:','https:'].includes(baseUrl.protocol) || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash || (baseUrl.protocol!=='https:' && !['localhost','127.0.0.1','[::1]'].includes(baseUrl.hostname))) throw new Error('Usa una base HTTPS sin credenciales; HTTP solo en localhost.');
+const token=process.env.P360_TOKEN;
+if(!token)throw new Error('Configura P360_TOKEN en la sesión; no lo pases como argumento.');
+const count=Number(process.env.P360_COUNT||20),concurrency=Number(process.env.P360_CONCURRENCY||2);
+if(!Number.isInteger(count)||count<1||count>1000||!Number.isInteger(concurrency)||concurrency<1||concurrency>10)throw new Error('Rangos permitidos: count 1–1000, concurrency 1–10');
+const catalogResponse=await fetch(base+'/api/catalog/products?storeId=1',{headers:{Authorization:'Bearer '+token},redirect:'error',signal:AbortSignal.timeout(15000)});if(!catalogResponse.ok)throw new Error('No se pudo leer el catálogo');const catalog=await catalogResponse.json();
+const product=process.env.P360_PRODUCT_ID?catalog.find(p=>String(p.id)===process.env.P360_PRODUCT_ID):catalog[0];
+if(!product)throw new Error('Producto de ensayo ausente del catálogo activo del local1.');
+const run=process.env.P360_RUN||new Date().toISOString();
+let next=0;const results=[];
+await Promise.all(Array.from({length:concurrency},async()=>{while(next<count){const n=next++;const start=performance.now();try{const r=await fetch(base+'/api/orders',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({storeId:1,customerName:'Prueba de carga '+run+' '+n,customerEmail:'carga@example.test',items:[{productId:product.id,quantity:1}]}),redirect:'error',signal:AbortSignal.timeout(15000)});const raw=await r.text();let orderId;try{if(r.status===201)orderId=JSON.parse(raw).id;}catch{}results.push({n,status:r.status,orderId,ms:performance.now()-start});}catch{results.push({n,status:0,ms:performance.now()-start});}}}));
+const times=results.map(r=>r.ms).sort((a,b)=>a-b);const percentile=p=>times[Math.min(times.length-1,Math.ceil(times.length*p)-1)];
+const output={date:new Date().toISOString(),run,productId:product.id,count,concurrency,success:results.filter(r=>r.status===201).length,failed:results.filter(r=>r.status!==201).length,p50ms:percentile(.5),p95ms:percentile(.95),results};writeFileSync('load-results.json',JSON.stringify(output,null,2),{mode:0o600});console.log({count,success:output.success,failed:output.failed,p50ms:output.p50ms,p95ms:output.p95ms});
+if(output.failed)process.exitCode=1;

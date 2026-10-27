@@ -9,11 +9,11 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class ServicesClientConfig {
 
-	@Bean
-	RestClient servicesClient(RestClient.Builder builder) {
-		SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-		factory.setConnectTimeout(3_000);
-		factory.setReadTimeout(10_000);
-		return builder.requestFactory(factory).build();
-	}
+  @Bean
+  RestClient servicesClient(RestClient.Builder builder) {
+    SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+    factory.setConnectTimeout(3_000);
+    factory.setReadTimeout(10_000);
+    return builder.requestFactory(factory).build();
+  }
 }

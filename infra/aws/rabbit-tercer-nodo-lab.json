@@ -1,0 +1,29 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Pedidos360: AMQP del tercer nodo solo desde la EC2 backend, sin nuevas EC2 ni apertura global. Para stacks existentes sin regla 5674.",
+  "Parameters": {
+    "RabbitSecurityGroupId": {
+      "Type": "AWS::EC2::SecurityGroup::Id"
+    },
+    "BackendSecurityGroupId": {
+      "Type": "AWS::EC2::SecurityGroup::Id"
+    }
+  },
+  "Resources": {
+    "RabbitFromBackend5674": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "RabbitSecurityGroupId"
+        },
+        "SourceSecurityGroupId": {
+          "Ref": "BackendSecurityGroupId"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 5674,
+        "ToPort": 5674,
+        "Description": "Pedidos360 tercer nodo Rabbit desde backend"
+      }
+    }
+  }
+}

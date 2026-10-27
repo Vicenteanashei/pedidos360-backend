@@ -1,0 +1,28 @@
+{
+  "policies": [
+    {
+      "vhost": "/pedidos360",
+      "name": "policy.email.dlx",
+      "pattern": "^q\\.cmd\\.email$",
+      "apply-to": "queues",
+      "priority": 0,
+      "definition": {"dead-letter-exchange": "cmd.dead.dlx", "dead-letter-routing-key": "email.send"}
+    },
+    {
+      "vhost": "/pedidos360",
+      "name": "policy.kitchen.dlx",
+      "pattern": "^q\\.cmd\\.kitchen$",
+      "apply-to": "queues",
+      "priority": 0,
+      "definition": {"dead-letter-exchange": "cmd.dead.dlx", "dead-letter-routing-key": "kitchen.ticket"}
+    },
+    {
+      "vhost": "/pedidos360",
+      "name": "policy.invoice.dlx",
+      "pattern": "^q\\.cmd\\.invoice$",
+      "apply-to": "queues",
+      "priority": 0,
+      "definition": {"dead-letter-exchange": "cmd.dead.dlx", "dead-letter-routing-key": "invoice.gen"}
+    }
+  ]
+}

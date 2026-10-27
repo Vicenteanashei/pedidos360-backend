@@ -1,0 +1,139 @@
+services:
+  oracle:
+    mem_limit: ${ORACLE_MEMORY_LIMIT:-3g}
+    image: gvenzl/oracle-free:23-slim-faststart
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_ADMIN_PASSWORD:?Generate .env first}
+      ORDERS_DB_PASSWORD: ${ORDERS_DB_PASSWORD:?Generate .env first}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Generate .env first}
+      NOTIFY_DB_PASSWORD: ${NOTIFY_DB_PASSWORD:?Generate .env first}
+    volumes:
+      - oradata:/opt/oracle/oradata
+      - ../oracle/01-users.sh:/container-entrypoint-initdb.d/01-users.sh:ro
+    healthcheck:
+      test: [CMD, healthcheck.sh]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+  orders:
+    mem_limit: ${APP_MEMORY_LIMIT:-768m}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        MODULE: ms-pedidos360-orders
+    environment:
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:?Configure your tenant}
+      API_CLIENT_ID: ${API_CLIENT_ID:?Configure your API registration}
+      RABBITMQ_ADDRESSES: ${RABBITMQ_ADDRESSES:-rabbit1:5672,rabbit2:5672,rabbit3:5672}
+      RABBITMQ_USER: ${RABBITMQ_USER:-pedidos360}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Generate .env first}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Generate .env first}
+      DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+      DB_USERNAME: P360_ORDERS
+      DB_PASSWORD: ${ORDERS_DB_PASSWORD:?Generate .env first}
+      CATALOG_URL: http://catalog:8082
+      REPORT_TIME_ZONE: ${REPORT_TIME_ZONE:-America/Santiago}
+    depends_on:
+      oracle:
+        condition: service_healthy
+    restart: unless-stopped
+  catalog:
+    mem_limit: ${APP_MEMORY_LIMIT:-768m}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        MODULE: ms-pedidos360-catalog
+    environment:
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:?Configure your tenant}
+      API_CLIENT_ID: ${API_CLIENT_ID:?Configure your API registration}
+      RABBITMQ_ADDRESSES: ${RABBITMQ_ADDRESSES:-rabbit1:5672,rabbit2:5672,rabbit3:5672}
+      RABBITMQ_USER: ${RABBITMQ_USER:-pedidos360}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Generate .env first}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Generate .env first}
+      DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+      DB_USERNAME: P360_CATALOG
+      DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Generate .env first}
+      SPRING_PROFILES_ACTIVE: ${CATALOG_PROFILE:-demo}
+    depends_on:
+      oracle:
+        condition: service_healthy
+    restart: unless-stopped
+  notify:
+    mem_limit: ${APP_MEMORY_LIMIT:-768m}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        MODULE: ms-pedidos360-notify
+    environment:
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:?Configure your tenant}
+      API_CLIENT_ID: ${API_CLIENT_ID:?Configure your API registration}
+      RABBITMQ_ADDRESSES: ${RABBITMQ_ADDRESSES:-rabbit1:5672,rabbit2:5672,rabbit3:5672}
+      RABBITMQ_USER: ${RABBITMQ_USER:-pedidos360}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Generate .env first}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+      DB_USERNAME: P360_NOTIFY
+      DB_PASSWORD: ${NOTIFY_DB_PASSWORD:?Generate .env first}
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      MAIL_HOST: ${MAIL_HOST:-localhost}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@example.invalid}
+      ARTIFACTS_DIR: /app/data/artifacts
+      DEMO_FAILURE_ENABLED: ${DEMO_FAILURE_ENABLED:-false}
+    volumes:
+      - artifacts:/app/data
+    depends_on:
+      oracle:
+        condition: service_healthy
+    restart: unless-stopped
+  bff:
+    mem_limit: ${APP_MEMORY_LIMIT:-768m}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        MODULE: ms-pedidos360-bff
+    environment:
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:?Configure your tenant}
+      API_CLIENT_ID: ${API_CLIENT_ID:?Configure your API registration}
+      RABBITMQ_ADDRESSES: ${RABBITMQ_ADDRESSES:-rabbit1:5672,rabbit2:5672,rabbit3:5672}
+      RABBITMQ_USER: ${RABBITMQ_USER:-pedidos360}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Generate .env first}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      ORDERS_URL: http://orders:8081
+      CATALOG_URL: http://catalog:8082
+      NOTIFY_URL: http://notify:8083
+      RABBIT_ADMIN_URL: http://rabbit-admin:8084
+    ports:
+      - "${BFF_BIND_ADDRESS:-127.0.0.1}:8080:8080"
+    restart: unless-stopped
+  rabbit-admin:
+    mem_limit: ${APP_MEMORY_LIMIT:-768m}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        MODULE: ms-pedidos360-rabbit-admin
+    environment:
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:?Configure your tenant}
+      API_CLIENT_ID: ${API_CLIENT_ID:?Configure your API registration}
+      RABBITMQ_ADDRESSES: ${RABBITMQ_ADDRESSES:-rabbit1:5672,rabbit2:5672,rabbit3:5672}
+      RABBITMQ_USER: ${RABBITMQ_USER:-pedidos360}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Generate .env first}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      RABBIT_ADMIN_USER: ${RABBIT_ADMIN_USER:-mqadmin}
+      RABBIT_ADMIN_PASSWORD: ${RABBIT_ADMIN_PASSWORD:?Generate .env first}
+      RABBIT_MANAGEMENT_URL: ${RABBIT_MANAGEMENT_URL:-http://rabbit1:15672}
+    restart: unless-stopped
+volumes:
+  oradata:
+  artifacts:
