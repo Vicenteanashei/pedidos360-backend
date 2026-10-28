@@ -19,12 +19,6 @@ public class MessagingConfig {
   public static final String EMAIL_KEY = "email.send";
   public static final String KITCHEN_KEY = "kitchen.ticket";
   public static final String INVOICE_KEY = "invoice.gen";
-  // Constantes en tiempo de compilación para usarlas en @RabbitListener de las DLQ.
-  public static final String EMAIL_DLQ = EMAIL_QUEUE + ".dlq";
-  public static final String KITCHEN_DLQ = KITCHEN_QUEUE + ".dlq";
-  public static final String INVOICE_DLQ = INVOICE_QUEUE + ".dlq";
-  // Aviso prioritario de cancelación: viaja por cmd.topic y llega a q.cmd.email por el patrón email.#.
-  public static final String EMAIL_HIGH_KEY = EMAIL_KEY + ".high";
 
   // One shared definition for topology, producers, consumers and DLQ inspection.
   public enum Task {
@@ -49,17 +43,10 @@ public class MessagingConfig {
   }
 
   public static final List<Task> TASKS = List.of(Task.values());
-  public static final Set<String> DLQ_NAMES = Set.of(EMAIL_DLQ, KITCHEN_DLQ, INVOICE_DLQ);
+  public static final Set<String> DLQ_NAMES =
+      Set.of(Task.EMAIL.dlq(), Task.KITCHEN.dlq(), Task.INVOICE.dlq());
   public static final Set<String> TASK_TYPES =
       Set.of(EMAIL_KEY, KITCHEN_KEY, INVOICE_KEY);
-
-  /**
-   * Las claves exactas de cada tarea van por cmd.direct; cualquier variante (p. ej. email.send.high)
-   * va por cmd.topic, donde los patrones email.#, kitchen.# e invoice.* deciden la cola.
-   */
-  public static String exchangeFor(String routingKey) {
-    return TASK_TYPES.contains(routingKey) ? DIRECT_EXCHANGE : TOPIC_EXCHANGE;
-  }
 
   @Bean
   Jackson2JsonMessageConverter jsonMessages() {

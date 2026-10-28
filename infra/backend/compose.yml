@@ -1,12 +1,9 @@
 services:
-  # Oracle local solo para desarrollo o como respaldo. En AWS la base vive en RDS for Oracle:
-  # definir DB_URL en el .env y este servicio no se levanta (perfil local-db apagado).
   oracle:
-    profiles: [local-db]
     mem_limit: ${ORACLE_MEMORY_LIMIT:-3g}
     image: gvenzl/oracle-free:23-slim-faststart
     environment:
-      ORACLE_PASSWORD: ${ORACLE_ADMIN_PASSWORD:-}
+      ORACLE_PASSWORD: ${ORACLE_ADMIN_PASSWORD:?Generate .env first}
       ORDERS_DB_PASSWORD: ${ORDERS_DB_PASSWORD:?Generate .env first}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Generate .env first}
       NOTIFY_DB_PASSWORD: ${NOTIFY_DB_PASSWORD:?Generate .env first}
@@ -35,7 +32,7 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Generate .env first}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Generate .env first}
-      DB_URL: ${DB_URL:-jdbc:oracle:thin:@//oracle:1521/FREEPDB1}
+      DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
       DB_USERNAME: P360_ORDERS
       DB_PASSWORD: ${ORDERS_DB_PASSWORD:?Generate .env first}
       CATALOG_URL: http://catalog:8082
@@ -43,8 +40,6 @@ services:
     depends_on:
       oracle:
         condition: service_healthy
-        # Con RDS el servicio oracle no existe en el proyecto; la dependencia se omite.
-        required: false
     restart: unless-stopped
   catalog:
     mem_limit: ${APP_MEMORY_LIMIT:-768m}
@@ -61,15 +56,13 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Generate .env first}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Generate .env first}
-      DB_URL: ${DB_URL:-jdbc:oracle:thin:@//oracle:1521/FREEPDB1}
+      DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
       DB_USERNAME: P360_CATALOG
       DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Generate .env first}
       SPRING_PROFILES_ACTIVE: ${CATALOG_PROFILE:-demo}
     depends_on:
       oracle:
         condition: service_healthy
-        # Con RDS el servicio oracle no existe en el proyecto; la dependencia se omite.
-        required: false
     restart: unless-stopped
   notify:
     mem_limit: ${APP_MEMORY_LIMIT:-768m}
@@ -85,7 +78,7 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER:-pedidos360}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Generate .env first}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
-      DB_URL: ${DB_URL:-jdbc:oracle:thin:@//oracle:1521/FREEPDB1}
+      DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
       DB_USERNAME: P360_NOTIFY
       DB_PASSWORD: ${NOTIFY_DB_PASSWORD:?Generate .env first}
       MAIL_ENABLED: ${MAIL_ENABLED:-false}
@@ -96,14 +89,11 @@ services:
       MAIL_FROM: ${MAIL_FROM:-no-reply@example.invalid}
       ARTIFACTS_DIR: /app/data/artifacts
       DEMO_FAILURE_ENABLED: ${DEMO_FAILURE_ENABLED:-false}
-      DLQ_LISTENER_ENABLED: ${DLQ_LISTENER_ENABLED:-true}
     volumes:
       - artifacts:/app/data
     depends_on:
       oracle:
         condition: service_healthy
-        # Con RDS el servicio oracle no existe en el proyecto; la dependencia se omite.
-        required: false
     restart: unless-stopped
   bff:
     mem_limit: ${APP_MEMORY_LIMIT:-768m}

@@ -28,14 +28,4 @@ class MessagingConfigTest {
     assertEquals(List.of("email.#", "kitchen.#", "invoice.*"),
         MessagingConfig.TASKS.stream().map(MessagingConfig.Task::topicPattern).toList());
   }
-
-  @Test
-  void exactTaskKeysUseDirectAndVariantsUseTopic() {
-    assertEquals(MessagingConfig.DIRECT_EXCHANGE, MessagingConfig.exchangeFor("email.send"));
-    assertEquals(MessagingConfig.DIRECT_EXCHANGE, MessagingConfig.exchangeFor("invoice.gen"));
-    assertEquals(MessagingConfig.TOPIC_EXCHANGE, MessagingConfig.exchangeFor(MessagingConfig.EMAIL_HIGH_KEY));
-    assertEquals(
-        java.util.Set.of("q.cmd.email.dlq", "q.cmd.kitchen.dlq", "q.cmd.invoice.dlq"),
-        MessagingConfig.DLQ_NAMES);
-  }
 }

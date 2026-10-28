@@ -143,8 +143,7 @@ public class OrderService {
     }
     repository.saveAndFlush(o);
     record(o, "STATUS_CHANGED", old);
-    // La cancelación se avisa como correo prioritario por cmd.topic; el resto, por cmd.direct.
-    command(o, EMAIL_KEY, next == OrderStatus.CANCELADO ? EMAIL_HIGH_KEY : EMAIL_KEY);
+    command(o, EMAIL_KEY);
     if (next == OrderStatus.ACEPTADO) command(o, KITCHEN_KEY);
     if (next == OrderStatus.ENTREGADO) command(o, INVOICE_KEY);
     return OrderResponse.from(o);
@@ -217,14 +216,9 @@ public class OrderService {
   }
 
   private void command(CustomerOrder o, String type) {
-    command(o, type, type);
-  }
-
-  /** type = tarea que procesa notify; routingKey = clave de publicación (decide el exchange). */
-  private void command(CustomerOrder o, String type, String routingKey) {
     var e = new OutboxEntry();
     e.id = UUID.randomUUID().toString();
-    e.routingKey = routingKey;
+    e.routingKey = type;
     e.createdAt = Instant.now();
     e.nextAttempt = e.createdAt;
     try {

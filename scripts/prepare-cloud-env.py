@@ -6,7 +6,6 @@ from urllib.parse import urlsplit
 root=Path(__file__).resolve().parents[1]
 p=argparse.ArgumentParser()
 p.add_argument('--frontend-url',required=True); p.add_argument('--api-url',required=True); p.add_argument('--rabbit-ip',required=True)
-p.add_argument('--db-url',help='JDBC de RDS for Oracle: jdbc:oracle:thin:@//<endpoint>:1521/<servicio>. Sin este valor se usa el contenedor Oracle local.')
 p.add_argument('--source',type=Path,default=root/'infra/.env')
 p.add_argument('--output',type=Path,default=root.parent/'entregables/preparacion-martes/privado')
 a=p.parse_args()
@@ -14,7 +13,6 @@ for value in [a.frontend_url,a.api_url]:
     url=urlsplit(value)
     if url.scheme!='https' or not url.hostname or url.username or url.password or url.query or url.fragment or re.search(r'[\r\n]',value):p.error('Usar URLs HTTPS reales sin credenciales/query/fragmento.')
 if urlsplit(a.frontend_url).path not in {'','/'}:p.error('Frontend debe ser origen HTTPS sin subruta.')
-if a.db_url and (not re.fullmatch(r'jdbc:oracle:thin:@//[A-Za-z0-9.-]+:\d{1,5}/[A-Za-z0-9_.$#-]+',a.db_url) or '@//oracle:' in a.db_url):p.error('--db-url debe ser jdbc:oracle:thin:@//<endpoint-rds>:1521/<servicio>.')
 ip=ipaddress.ip_address(a.rabbit_ip)
 if ip.version!=4 or not any(ip in ipaddress.ip_network(n) for n in ['10.0.0.0/8','172.16.0.0/12','192.168.0.0/16']):p.error('Rabbit requiere IP privada IPv4 RFC1918.')
 values={}
@@ -25,11 +23,8 @@ for line in a.source.read_text().splitlines():
         parts=shlex.split(raw,comments=True);values[key.strip()]=parts[0] if parts else ''
     else:values[key.strip()]=raw
 required=['ENTRA_TENANT_ID','SPA_CLIENT_ID','API_CLIENT_ID','ORACLE_ADMIN_PASSWORD','ORDERS_DB_PASSWORD','CATALOG_DB_PASSWORD','NOTIFY_DB_PASSWORD','INTERNAL_SERVICE_KEY','RABBITMQ_USER','RABBITMQ_PASSWORD','RABBITMQ_COOKIE','RABBIT_ADMIN_USER','RABBIT_ADMIN_PASSWORD']
-# Con RDS la contraseña maestra no viaja a la EC2: solo los usuarios P360 de cada servicio.
-if a.db_url:required=[k for k in required if k!='ORACLE_ADMIN_PASSWORD']
 if any(not values.get(k) for k in required):p.error('Faltan claves en el .env de origen; no se imprimen valores.')
 backend={k:values[k] for k in required if k not in {'RABBITMQ_COOKIE'}}
-if a.db_url:backend['DB_URL']=a.db_url
 backend.update(RABBITMQ_ADDRESSES=f'{ip}:5672,{ip}:5673,{ip}:5674',RABBIT_MANAGEMENT_URL=f'http://{ip}:15672',BFF_BIND_ADDRESS='0.0.0.0',CORS_ALLOWED_ORIGINS=a.frontend_url.rstrip('/'),REPORT_TIME_ZONE='America/Santiago',MAIL_ENABLED='false',DEMO_FAILURE_ENABLED='false',CATALOG_PROFILE='demo')
 frontend={k:values[k] for k in ['ENTRA_TENANT_ID','SPA_CLIENT_ID','API_CLIENT_ID']}
 frontend.update(PUBLIC_API_URL=a.api_url.rstrip('/'),FRONTEND_BIND_ADDRESS='0.0.0.0',FRONTEND_PORT='80',VITE_DIAGNOSTICS='true')
