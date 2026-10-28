@@ -15,10 +15,19 @@ import org.springframework.web.server.ResponseStatusException;
 public class NotificationsController {
   private final ReceiptRepository receipts;
   private final DeliveryService service;
+  private final DeadLetterRepository deadLetters;
 
-  public NotificationsController(ReceiptRepository r, DeliveryService s) {
+  public NotificationsController(ReceiptRepository r, DeliveryService s, DeadLetterRepository d) {
     receipts = r;
     service = s;
+    deadLetters = d;
+  }
+
+  /** Mensajes que llegaron a las DLQ y archivó el consumidor de errores, más recientes primero. */
+  @GetMapping("/dead-letters")
+  @PreAuthorize("hasRole('Admin')")
+  public List<DeadLetter> deadLetters() {
+    return deadLetters.findAllByOrderByArchivedAtDesc(PageRequest.of(0, 100));
   }
 
   @GetMapping

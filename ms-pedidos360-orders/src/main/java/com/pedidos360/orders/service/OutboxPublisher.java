@@ -45,7 +45,7 @@ public class OutboxPublisher {
               p.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
               var correlation = new CorrelationData(e.id);
               rabbit.send(
-                  com.pedidos360.common.MessagingConfig.DIRECT_EXCHANGE,
+                  com.pedidos360.common.MessagingConfig.exchangeFor(e.routingKey),
                   e.routingKey,
                   new Message(e.payload.getBytes(java.nio.charset.StandardCharsets.UTF_8), p),
                   correlation);

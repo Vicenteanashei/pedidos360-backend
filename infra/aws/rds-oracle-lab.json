@@ -1,0 +1,154 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Pedidos360 EA2: RDS for Oracle privado (sin acceso publico). Solo la EC2 backend llega al puerto 1521. Las tablas las crea Flyway; los usuarios, scripts/init-rds-users.py.",
+  "Parameters": {
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "SubnetA": {
+      "Type": "AWS::EC2::Subnet::Id",
+      "Description": "Subred en una zona de disponibilidad"
+    },
+    "SubnetB": {
+      "Type": "AWS::EC2::Subnet::Id",
+      "Description": "Subred en OTRA zona de disponibilidad (RDS exige dos)"
+    },
+    "BackendSecurityGroupId": {
+      "Type": "AWS::EC2::SecurityGroup::Id",
+      "Description": "Security Group de la EC2 backend (BFF + microservicios)"
+    },
+    "DbInstanceClass": {
+      "Type": "String",
+      "Default": "db.t3.small",
+      "AllowedValues": [
+        "db.t3.small",
+        "db.t3.medium"
+      ],
+      "Description": "Oracle SE2 requiere al menos db.t3.small"
+    },
+    "MasterUsername": {
+      "Type": "String",
+      "Default": "admin",
+      "AllowedPattern": "^[A-Za-z][A-Za-z0-9_]{0,29}$"
+    },
+    "MasterPassword": {
+      "Type": "String",
+      "NoEcho": true,
+      "MinLength": 12,
+      "MaxLength": 30,
+      "AllowedPattern": "^[A-Za-z0-9_#$-]+$",
+      "ConstraintDescription": "12 a 30 caracteres: letras, numeros y _ # $ -"
+    }
+  },
+  "Resources": {
+    "DbSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Pedidos360 RDS Oracle: 1521 solo desde la EC2 backend",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 1521,
+            "ToPort": 1521,
+            "SourceSecurityGroupId": {
+              "Ref": "BackendSecurityGroupId"
+            },
+            "Description": "Microservicios del backend"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "pedidos360-rds"
+          }
+        ]
+      }
+    },
+    "DbSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "DBSubnetGroupDescription": "Pedidos360 RDS Oracle",
+        "SubnetIds": [
+          {
+            "Ref": "SubnetA"
+          },
+          {
+            "Ref": "SubnetB"
+          }
+        ]
+      }
+    },
+    "Database": {
+      "Type": "AWS::RDS::DBInstance",
+      "DeletionPolicy": "Delete",
+      "UpdateReplacePolicy": "Delete",
+      "Properties": {
+        "DBInstanceIdentifier": {
+          "Fn::Sub": "${AWS::StackName}-oracle"
+        },
+        "Engine": "oracle-se2",
+        "LicenseModel": "license-included",
+        "DBName": "ORCL",
+        "DBInstanceClass": {
+          "Ref": "DbInstanceClass"
+        },
+        "AllocatedStorage": "20",
+        "StorageType": "gp3",
+        "StorageEncrypted": true,
+        "MasterUsername": {
+          "Ref": "MasterUsername"
+        },
+        "MasterUserPassword": {
+          "Ref": "MasterPassword"
+        },
+        "DBSubnetGroupName": {
+          "Ref": "DbSubnetGroup"
+        },
+        "VPCSecurityGroups": [
+          {
+            "Ref": "DbSecurityGroup"
+          }
+        ],
+        "PubliclyAccessible": false,
+        "MultiAZ": false,
+        "BackupRetentionPeriod": 1,
+        "DeletionProtection": false,
+        "AutoMinorVersionUpgrade": true,
+        "CopyTagsToSnapshot": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "pedidos360-oracle"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "DbEndpoint": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Database",
+          "Endpoint.Address"
+        ]
+      }
+    },
+    "DbUrl": {
+      "Description": "Copiar a DB_URL en el .env de la EC2 backend",
+      "Value": {
+        "Fn::Sub": "jdbc:oracle:thin:@//${Database.Endpoint.Address}:${Database.Endpoint.Port}/ORCL"
+      }
+    },
+    "DbSecurityGroupId": {
+      "Value": {
+        "Ref": "DbSecurityGroup"
+      }
+    },
+    "NextStep": {
+      "Value": "En la EC2 backend: definir DB_URL, ejecutar scripts/init-rds-users.py y luego scripts/deploy-host.sh backend."
+    }
+  }
+}

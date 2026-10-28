@@ -151,6 +151,9 @@ class OrderControllerTest {
   void customerCancellationAndRecovery() throws Exception {
     long id = create();
     move(id, "CANCELADO", "Cliente").andExpect(status().isOk());
+    // El aviso de cancelación sale por cmd.topic con la variante prioritaria.
+    assertEquals(
+        1, outbox.findAll().stream().filter(e -> e.routingKey.equals("email.send.high")).count());
     recovery.reconcile();
     verify(catalog, never()).release(anyString());
     assertEquals(0, inventory.count());

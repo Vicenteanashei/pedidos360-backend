@@ -1,0 +1,283 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Pedidos360 EA2: 2 EC2 (aplicaciones: BFF + microservicios; Rabbit: 3 nodos), bootstrap Docker, sin secretos. La base va en RDS (rds-oracle-lab.json) y el frontend en S3 + CloudFront (repo frontend).",
+  "Parameters": {
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "SubnetId": {
+      "Type": "AWS::EC2::Subnet::Id"
+    }
+  },
+  "Resources": {
+    "BackendSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Pedidos360 EA2 Aplicaciones (BFF + microservicios); BFF expuesto solo al ALB interno del API Gateway",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "18.206.107.24/29",
+            "Description": "AWS EC2 Instance Connect us-east-1"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "pedidos360-ea2-backend"
+          }
+        ]
+      }
+    },
+    "RabbitSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Pedidos360 EA2 Rabbit; browser administration only",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "18.206.107.24/29",
+            "Description": "AWS EC2 Instance Connect us-east-1"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "pedidos360-ea2-rabbit"
+          }
+        ]
+      }
+    },
+    "RabbitFromBackend5672": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "RabbitSG"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 5672,
+        "ToPort": 5672,
+        "SourceSecurityGroupId": {
+          "Ref": "BackendSG"
+        },
+        "Description": "Backend only"
+      }
+    },
+    "RabbitFromBackend5673": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "RabbitSG"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 5673,
+        "ToPort": 5673,
+        "SourceSecurityGroupId": {
+          "Ref": "BackendSG"
+        },
+        "Description": "Backend only"
+      }
+    },
+    "RabbitFromBackend15672": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "RabbitSG"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 15672,
+        "ToPort": 15672,
+        "SourceSecurityGroupId": {
+          "Ref": "BackendSG"
+        },
+        "Description": "Backend only"
+      }
+    },
+    "Backend": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": "ami-0d27e0fb3bac4d724",
+        "InstanceType": "t3.large",
+        "CreditSpecification": {
+          "CPUCredits": "standard"
+        },
+        "KeyName": "vockey",
+        "NetworkInterfaces": [
+          {
+            "DeviceIndex": "0",
+            "AssociatePublicIpAddress": true,
+            "SubnetId": {
+              "Ref": "SubnetId"
+            },
+            "GroupSet": [
+              {
+                "Ref": "BackendSG"
+              }
+            ]
+          }
+        ],
+        "MetadataOptions": {
+          "HttpTokens": "required",
+          "HttpPutResponseHopLimit": 1
+        },
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "VolumeSize": 40,
+              "VolumeType": "gp3",
+              "Encrypted": true,
+              "DeleteOnTermination": true
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": "#!/bin/bash\nset -euo pipefail\nexec > >(tee -a /var/log/pedidos360-bootstrap.log) 2>&1\ndnf install -y docker unzip\nsystemctl enable --now docker\ninstall -d -m 0755 /usr/local/lib/docker/cli-plugins\ncurl --fail --location --retry 3 https://github.com/docker/compose/releases/download/v5.6.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose\nchmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose\ncurl --fail --location --retry 3 https://github.com/docker/buildx/releases/download/v0.37.2/buildx-v0.37.2.linux-amd64 -o /tmp/p360-buildx\nprintf '%s\\n' '982ca20490b45ed1ec8d99795974d3d874a358f75938c9c237305010e6b7e548  /tmp/p360-buildx' | sha256sum --check\ninstall -m 0755 /tmp/p360-buildx /usr/local/lib/docker/cli-plugins/docker-buildx\ndocker buildx version\ninstall -d -m 0700 /opt/pedidos360\ndocker --version\ndocker compose version\nprintf 'Docker ready; application deployment pending\\n' > /opt/pedidos360/STATUS\n"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "pedidos360-ea2-backend"
+          },
+          {
+            "Key": "Project",
+            "Value": "Pedidos360-EA2"
+          }
+        ]
+      }
+    },
+    "Rabbit": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": "ami-0d27e0fb3bac4d724",
+        "InstanceType": "t3.small",
+        "CreditSpecification": {
+          "CPUCredits": "standard"
+        },
+        "KeyName": "vockey",
+        "NetworkInterfaces": [
+          {
+            "DeviceIndex": "0",
+            "AssociatePublicIpAddress": true,
+            "SubnetId": {
+              "Ref": "SubnetId"
+            },
+            "GroupSet": [
+              {
+                "Ref": "RabbitSG"
+              }
+            ]
+          }
+        ],
+        "MetadataOptions": {
+          "HttpTokens": "required",
+          "HttpPutResponseHopLimit": 1
+        },
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "VolumeSize": 20,
+              "VolumeType": "gp3",
+              "Encrypted": true,
+              "DeleteOnTermination": true
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": "#!/bin/bash\nset -euo pipefail\nexec > >(tee -a /var/log/pedidos360-bootstrap.log) 2>&1\ndnf install -y docker unzip\nsystemctl enable --now docker\ninstall -d -m 0755 /usr/local/lib/docker/cli-plugins\ncurl --fail --location --retry 3 https://github.com/docker/compose/releases/download/v5.6.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose\nchmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose\ncurl --fail --location --retry 3 https://github.com/docker/buildx/releases/download/v0.37.2/buildx-v0.37.2.linux-amd64 -o /tmp/p360-buildx\nprintf '%s\\n' '982ca20490b45ed1ec8d99795974d3d874a358f75938c9c237305010e6b7e548  /tmp/p360-buildx' | sha256sum --check\ninstall -m 0755 /tmp/p360-buildx /usr/local/lib/docker/cli-plugins/docker-buildx\ndocker buildx version\ninstall -d -m 0700 /opt/pedidos360\ndocker --version\ndocker compose version\nprintf 'Docker ready; application deployment pending\\n' > /opt/pedidos360/STATUS\n"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "pedidos360-ea2-rabbit"
+          },
+          {
+            "Key": "Project",
+            "Value": "Pedidos360-EA2"
+          }
+        ]
+      }
+    },
+    "RabbitFromBackend5674": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "RabbitSG"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 5674,
+        "ToPort": 5674,
+        "SourceSecurityGroupId": {
+          "Ref": "BackendSG"
+        },
+        "Description": "Backend only"
+      }
+    }
+  },
+  "Outputs": {
+    "BackendInstanceId": {
+      "Value": {
+        "Ref": "Backend"
+      }
+    },
+    "BackendPublicIp": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Backend",
+          "PublicIp"
+        ]
+      }
+    },
+    "BackendPrivateIp": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Backend",
+          "PrivateIp"
+        ]
+      }
+    },
+    "RabbitInstanceId": {
+      "Value": {
+        "Ref": "Rabbit"
+      }
+    },
+    "RabbitPublicIp": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Rabbit",
+          "PublicIp"
+        ]
+      }
+    },
+    "RabbitPrivateIp": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Rabbit",
+          "PrivateIp"
+        ]
+      }
+    },
+    "BackendSecurityGroupId": {
+      "Description": "Usar en rds-oracle-lab.json y api-gateway-lab.json",
+      "Value": {
+        "Ref": "BackendSG"
+      }
+    },
+    "RabbitSecurityGroupId": {
+      "Value": {
+        "Ref": "RabbitSG"
+      }
+    }
+  }
+}

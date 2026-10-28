@@ -67,6 +67,9 @@ app:
     enabled: ${MAIL_ENABLED:false}
   messaging:
     enabled: true
+    # Consumidor de las DLQ (archiva y hace ACK). En false los mensajes quedan visibles en las DLQ.
+    dlq-listener:
+      enabled: ${DLQ_LISTENER_ENABLED:true}
     consumer:
       max-attempts: 3
       initial-delay: 1000

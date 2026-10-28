@@ -1387,6 +1387,33 @@
         },
         "AuthorizationType": "NONE"
       }
+    },
+    "RouteDeadLetters": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "GET /api/notifications/dead-letters",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "BffIntegration"
+              }
+            ]
+          ]
+        },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": {
+          "Ref": "EntraAuthorizer"
+        },
+        "AuthorizationScopes": [
+          "access_as_user"
+        ]
+      }
     }
   },
   "Outputs": {
