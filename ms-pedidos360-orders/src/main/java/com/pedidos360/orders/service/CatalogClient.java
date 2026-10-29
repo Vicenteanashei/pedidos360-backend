@@ -14,7 +14,7 @@ public class CatalogClient {
   private final RestClient client;
   private final String serviceKey;
 
-  public record Product(Long id, Long storeId, BigDecimal price, Boolean active) {}
+  public record Product(Long id, Long storeId, BigDecimal price, Boolean active, Integer stock) {}
 
   public CatalogClient(
       RestClient.Builder builder,

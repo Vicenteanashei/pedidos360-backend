@@ -176,6 +176,28 @@ public class OrderService {
   }
 
   private void apply(CustomerOrder o, OrderRequest r) {
+    // Check the complete request, not each line separately: a product may occur more than once.
+    // Stock is checked again under a product lock when accepting/reserving the order.
+    Map<Long, Integer> quantities = new LinkedHashMap<>();
+    r.items().forEach(i -> quantities.merge(i.productId(), i.quantity(), Math::addExact));
+    Map<Long, CatalogClient.Product> products = new HashMap<>();
+    for (var requested : quantities.entrySet()) {
+      var product = catalog.product(requested.getKey());
+      if (product == null
+          || !Boolean.TRUE.equals(product.active())
+          || !r.storeId().equals(product.storeId()))
+        throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "Producto inválido para este local");
+      if (product.stock() == null || product.stock() < 0)
+        throw new ResponseStatusException(
+            HttpStatus.SERVICE_UNAVAILABLE, "No se pudo consultar el stock del producto #" + requested.getKey());
+      if (requested.getValue() > product.stock())
+        throw new ResponseStatusException(
+            HttpStatus.CONFLICT,
+            "Stock insuficiente para el producto #" + requested.getKey()
+                + ": disponibles " + product.stock() + ", solicitados " + requested.getValue());
+      products.put(requested.getKey(), product);
+    }
     o.setStoreId(r.storeId());
     o.setCustomerName(r.customerName());
     o.setCustomerEmail(r.customerEmail());
@@ -185,12 +207,7 @@ public class OrderService {
         r.items().stream()
             .map(
                 i -> {
-                  var product = catalog.product(i.productId());
-                  if (product == null
-                      || !Boolean.TRUE.equals(product.active())
-                      || !r.storeId().equals(product.storeId()))
-                    throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "Producto inválido para este local");
+                  var product = products.get(i.productId());
                   var item = new OrderItem();
                   item.setProductId(i.productId());
                   item.setQuantity(i.quantity());

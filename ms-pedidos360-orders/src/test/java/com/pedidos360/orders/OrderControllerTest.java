@@ -45,9 +45,9 @@ class OrderControllerTest {
     orders.deleteAll();
     operators.deleteAll();
     when(catalog.product(10L))
-        .thenReturn(new CatalogClient.Product(10L, 1L, new BigDecimal("2200"), true));
+        .thenReturn(new CatalogClient.Product(10L, 1L, new BigDecimal("2200"), true, 40));
     when(catalog.product(11L))
-        .thenReturn(new CatalogClient.Product(11L, 1L, new BigDecimal("2500"), true));
+        .thenReturn(new CatalogClient.Product(11L, 1L, new BigDecimal("2500"), true, 100));
   }
 
   static SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor actor(
@@ -93,6 +93,80 @@ class OrderControllerTest {
     assertEquals("tenant:ana", orders.findById(id).orElseThrow().getOwnerId());
     assertEquals(1, outbox.count());
     assertEquals(1, audit.count());
+  }
+
+  @Test
+  void creationAboveStockDoesNotCreateOrderAuditOrMessage() throws Exception {
+    var request = json.readTree(ORDER);
+    ((com.fasterxml.jackson.databind.node.ObjectNode) request.path("items").get(0))
+        .put("quantity", 41);
+    mvc.perform(post("/api/orders").with(actor("ana", "Cliente"))
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("disponibles 40, solicitados 41")));
+    assertEquals(0, orders.count());
+    assertEquals(0, audit.count());
+    assertEquals(0, outbox.count());
+    verify(catalog, never()).reserve(any(), anyString());
+  }
+
+  @Test
+  void duplicateProductLinesShareTheSameAvailableStock() throws Exception {
+    var request = json.readTree(ORDER);
+    var lines = ((com.fasterxml.jackson.databind.node.ObjectNode) request).putArray("items");
+    lines.addObject().put("productId", 10).put("quantity", 25);
+    lines.addObject().put("productId", 10).put("quantity", 20);
+    mvc.perform(post("/api/orders").with(actor("ana", "Cliente"))
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("solicitados 45")));
+    assertEquals(0, orders.count());
+    assertEquals(0, outbox.count());
+    verify(catalog, times(1)).product(10L);
+  }
+
+  @Test
+  void duplicateProductLinesAtTheStockLimitAreAllowed() throws Exception {
+    var request = json.readTree(ORDER);
+    var lines = ((com.fasterxml.jackson.databind.node.ObjectNode) request).putArray("items");
+    lines.addObject().put("productId", 10).put("quantity", 25);
+    lines.addObject().put("productId", 10).put("quantity", 15);
+    mvc.perform(post("/api/orders").with(actor("ana", "Cliente"))
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request)))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.total").value(88000));
+    assertEquals(1, orders.count());
+    assertEquals(1, outbox.count());
+    verify(catalog, times(1)).product(10L);
+  }
+
+  @Test
+  void unavailableOrUnknownStockCannotCreateOrders() throws Exception {
+    for (Integer stock : new Integer[] {0, null}) {
+      when(catalog.product(10L))
+          .thenReturn(new CatalogClient.Product(10L, 1L, new BigDecimal("2200"), true, stock));
+      mvc.perform(post("/api/orders").with(actor("ana", "Cliente"))
+              .contentType(MediaType.APPLICATION_JSON).content(ORDER))
+          .andExpect(stock == null ? status().isServiceUnavailable() : status().isConflict());
+    }
+    assertEquals(0, orders.count());
+    assertEquals(0, audit.count());
+    assertEquals(0, outbox.count());
+  }
+
+  @Test
+  void editAboveCurrentStockPreservesTheSavedOrderAndOutbox() throws Exception {
+    long id = create();
+    // Another accepted order can reduce stock since this order was created.
+    when(catalog.product(10L))
+        .thenReturn(new CatalogClient.Product(10L, 1L, new BigDecimal("2200"), true, 1));
+    mvc.perform(put("/api/orders/" + id).with(actor("ana", "Cliente"))
+            .contentType(MediaType.APPLICATION_JSON).content(ORDER))
+        .andExpect(status().isConflict());
+    var saved = orders.findById(id).orElseThrow();
+    assertEquals(0, saved.getTotal().compareTo(new BigDecimal("6900")));
+    assertEquals(1, audit.count());
+    assertEquals(1, outbox.count());
   }
 
   @Test
