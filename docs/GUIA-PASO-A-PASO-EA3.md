@@ -1,6 +1,6 @@
 # Guía paso a paso EA3: del estado actual a la presentación
 
-Estado de partida (17-11-2026): Kafka ya está desplegado y verificado en AWS (EC2 `pedidos360-ea3-kafka`, IP privada **172.31.19.0**, hoy **detenida**). El código de Report, Audit y Kafka Admin está listo y probado en local, pero **no está desplegado en el backend de EA2, no está en Git y no se ha probado con el login real de Entra**. Esta guía cubre lo que falta.
+Estado de partida (17-11-2026): Kafka ya está desplegado y verificado en AWS (EC2 `pedidos360-ea3-kafka`, IP privada **<IP_PRIVADA_KAFKA>**, hoy **detenida**). El código de Report, Audit y Kafka Admin está listo y probado en local, pero **no está desplegado en el backend de EA2, no está en Git y no se ha probado con el login real de Entra**. Esta guía cubre lo que falta.
 
 Tiempos estimados entre paréntesis. Marque cada casilla al terminarla.
 
@@ -9,12 +9,13 @@ Tiempos estimados entre paréntesis. Marque cada casilla al terminarla.
 | Dato | Valor |
 | --- | --- |
 | Región | us-east-1 |
-| Backend EA2 | `pedidos360-ea2-backend`, t3.large, IP privada 172.31.29.96, SG `sg-07b7360d9b1377715` |
-| Rabbit EA2 | `pedidos360-ea2-rabbit`, t3.small, IP privada 172.31.26.104 |
+| Backend EA2 | `pedidos360-ea2-backend`, t3.large, IP privada <IP privada del backend>, SG `<SG del backend>` |
+| Rabbit EA2 | `pedidos360-ea2-rabbit`, t3.small, IP privada <IP privada de Rabbit> |
 | Frontend EA2 | `pedidos360-ea2-frontend`, t3.micro |
-| Kafka EA3 | `pedidos360-ea3-kafka`, t3.large, IP privada 172.31.19.0, SG `sg-0820ac7568f641f64` |
-| URL de frontend y API (mismo origen) | https://9ho8slvvj6.execute-api.us-east-1.amazonaws.com |
-| Redirect de Entra | https://9ho8slvvj6.execute-api.us-east-1.amazonaws.com/redirect.html |
+| Kafka EA3 | `pedidos360-ea3-kafka`, t3.large, IP privada <IP_PRIVADA_KAFKA>, SG `<SG de Kafka>` |
+| URL de frontend y API (mismo origen) | https://<ID>.execute-api.us-east-1.amazonaws.com |
+| Redirect de Entra | https://<ID>.execute-api.us-east-1.amazonaws.com/redirect.html |
+| Valores reales de esta tabla | Archivo privado `~/.local/share/cloud-native-toolchain/aws-env/datos-aws-ea3.txt` (no se publica); las IP privadas también salen de EC2 → Detalles de cada instancia, y la URL de la app de CloudFormation → stack `pedidos360-ea2-https` → Outputs |
 | Claves nuevas para el backend | `~/.local/share/cloud-native-toolchain/aws-env/backend-ea3-agregar.env` |
 | Clave de Kafka UI | `~/.local/share/cloud-native-toolchain/kafka-ui-aws-credenciales.txt` |
 
@@ -93,7 +94,7 @@ Debe quedar un archivo por volumen. No continúe sin backup.
 El `.env` actual de EA2 (con Oracle, Rabbit y Entra) **se conserva tal cual**. Solo se **agregan** estas líneas al final:
 
 ```
-KAFKA_BOOTSTRAP_SERVERS='172.31.19.0:9092,172.31.19.0:9093,172.31.19.0:9094'
+KAFKA_BOOTSTRAP_SERVERS='<IP_PRIVADA_KAFKA>:9092,<IP_PRIVADA_KAFKA>:9093,<IP_PRIVADA_KAFKA>:9094'
 REPORT_DB_PASSWORD='<valor de backend-ea3-agregar.env>'
 AUDIT_DB_PASSWORD='<valor de backend-ea3-agregar.env>'
 KAFKA_UI_USER='kafkaadmin'
@@ -136,7 +137,7 @@ docker logs --tail 30 pedidos360-ea2-backend-audit-1    | grep -i -E "assigned|E
 
 ### Paso 10. Reconstruir el frontend (10 min)
 - [ ] Entre al host frontend por EC2 Instance Connect, obtenga el código nuevo (Paso 5) y ejecute `bash scripts/deploy-host.sh frontend infra/.env`.
-- [ ] Abra https://9ho8slvvj6.execute-api.us-east-1.amazonaws.com y entre con una cuenta de Entra con rol **Admin**.
+- [ ] Abra https://<ID>.execute-api.us-east-1.amazonaws.com y entre con una cuenta de Entra con rol **Admin**.
 - [ ] Debe aparecer la pestaña **Kafka** en el menú.
 
 ---
@@ -150,7 +151,7 @@ Kafka UI escucha solo en `127.0.0.1` de la EC2. Para verla necesita un túnel SS
 ```bash
 ssh -i vockey.pem -L 8088:127.0.0.1:8088 ec2-user@<IP pública de la EC2 Kafka>
 ```
-Para que el SSH funcione, el SG de Kafka permite el puerto 22 solo desde la IP que usted indicó en el parámetro `SshSourceCidr` (su IP pública con `/32`). Si su IP pública cambió, edítela en EC2 → Security Groups → `sg-0820ac7568f641f64` → Inbound rules. Luego abra http://127.0.0.1:8088 (usuario `kafkaadmin`).
+Para que el SSH funcione, el SG de Kafka permite el puerto 22 solo desde la IP que usted indicó en el parámetro `SshSourceCidr` (su IP pública con `/32`). Si su IP pública cambió, edítela en EC2 → Security Groups → `<SG de Kafka>` → Inbound rules. Luego abra http://127.0.0.1:8088 (usuario `kafkaadmin`).
 
 ### Paso 12. Recorrido de un pedido (5 min)
 - [ ] Crear un pedido (como Cliente u Operador) y llevarlo por los estados: aceptado → en preparación → despachado → entregado.
@@ -189,7 +190,7 @@ En la pestaña **Kafka** (Admin):
 ### Paso 17. Carga (opcional, 5 min)
 `scripts/stream-load.mjs` necesita un token de acceso. Sáquelo desde el navegador: F12 → Network → cualquier llamada a la API → cabecera `Authorization` (copie solo lo que va después de `Bearer`). Ejecútelo en su PC contra la URL pública:
 ```bash
-export P360_API_URL=https://9ho8slvvj6.execute-api.us-east-1.amazonaws.com P360_ACCESS_TOKEN=<token> P360_PRODUCT_ID=<id de un producto con stock> P360_STORE_ID=1 P360_LOAD_COUNT=50
+export P360_API_URL=https://<ID>.execute-api.us-east-1.amazonaws.com P360_ACCESS_TOKEN=<token> P360_PRODUCT_ID=<id de un producto con stock> P360_STORE_ID=1 P360_LOAD_COUNT=50
 node scripts/stream-load.mjs
 ```
 El token dura ~1 hora y es una credencial: no lo guarde ni lo comparta. Anote latencia media/P95 y que el lag vuelve a 0.
