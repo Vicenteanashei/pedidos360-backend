@@ -28,7 +28,7 @@ Duración sugerida: 10–12 min. Cada paso indica qué mostrar y qué decir. Las
 ## 6. Administración (2 min)
 - Kafka Admin (pantalla Kafka del frontend, rol Admin): clúster, tópicos, configuración, grupos y offsets.
 - Crear, modificar y borrar `demo.*`; intentar borrar `orders.events` → rechazado (403).
-- Kafka UI por túnel: es una herramienta independiente del microservicio.
+- Kafka UI (acceso temporal restringido a su IP): es una herramienta independiente del microservicio.
 
 ## 7. No regresión (1 min)
 - Rabbit, DLQ, notificaciones, stock y roles anteriores siguen funcionando.

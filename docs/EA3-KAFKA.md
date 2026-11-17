@@ -69,7 +69,7 @@ La herramienta produce backend.env, frontend.env, rabbit.env y kafka.env. No imp
 
 infra/aws/kafka-host-lab.json permite preparar una EC2 adicional, sin modificar la plantilla de las tres EC2 de EA2. Requiere VPC, subnet con salida a Internet, SG del backend y CIDR administrativo. El host dispone de Docker y Compose; el despliegue de fuentes/configuración se realiza después. Revisar capacidad/costos de la cuenta antes de crear recursos. El volumen raíz se elimina al borrar la instancia: guardar backup antes de eliminar el stack.
 
-Usar un host de al menos 8 GiB de RAM para este laboratorio. Permitir TCP 9092–9094 únicamente desde el SG del backend. ZooKeeper no publica puertos al host. Kafka UI se enlaza a 127.0.0.1 y requiere credenciales propias: acceder mediante un túnel administrativo, sin exponerlo a Internet. La comunicación Kafka PLAINTEXT queda dentro de la red privada; si el escenario exige TLS/SASL, configurarlo antes de ampliar su exposición.
+Usar un host de al menos 8 GiB de RAM para este laboratorio. Permitir TCP 9092–9094 únicamente desde el SG del backend. ZooKeeper no publica puertos al host. Kafka UI se enlaza a 127.0.0.1 y requiere credenciales propias. En el host autoconfigurable (sin llave SSH) no hay túnel SSH posible: para una demostración se abre de forma temporal y restringida (se enlaza a 0.0.0.0 y el SG admite el puerto 8088 solo desde la IP /32 del presentador), y se vuelve a cerrar al terminar: en /opt/pedidos360/kafka poner KAFKA_UI_BIND_ADDRESS=0.0.0.0 en kafka.env, ejecutar `docker compose --env-file kafka.env -p pedidos360-ea3-kafka -f compose.yml up -d --no-deps kafka-ui` y abrir el puerto 8088 en el SG; al terminar, revertir ambos cambios. Para ejecutar comandos en el host se usa EC2 Instance Connect desde la consola, con una regla SSH desde 18.206.107.24/29. La comunicación Kafka PLAINTEXT queda dentro de la red privada; si el escenario exige TLS/SASL, configurarlo antes de ampliar su exposición.
 
 En el host Kafka, con kafka.env transferido aparte:
 
@@ -166,7 +166,7 @@ El broker embebido usa RF=1 para probar integración sin Docker. No acredita el 
 6. KAFKA_CONCURRENCY=1 en el .env del backend y dos/tres instancias de Report para mostrar reparto/rebalanceo; no publicar puertos adicionales del servicio.
 7. Evento inválido a DLT y continuación del siguiente evento válido.
 8. Crear, modificar e inspeccionar demo.* por API; demostrar protección de tópicos del caso.
-9. Mostrar Kafka UI por túnel.
+9. Mostrar Kafka UI (acceso temporal restringido a la IP del presentador, descrito en la sección «Host Kafka en AWS»).
 10. Confirmar que Rabbit, DLQ, notificaciones, stock y roles anteriores siguen funcionando.
 
 Para una carga explícita de laboratorio, scripts/stream-load.mjs lee P360_API_URL, P360_ACCESS_TOKEN, P360_PRODUCT_ID, P360_STORE_ID y P360_LOAD_COUNT del entorno privado. No poner el token en argumentos ni guardar la salida de un entorno que lo imprima. Inicia con 20 pedidos; el máximo está limitado a 5000 y la concurrencia HTTP a cinco. Solo ejecutarlo contra datos de prueba.
