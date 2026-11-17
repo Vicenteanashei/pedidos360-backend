@@ -9,6 +9,8 @@ spring:
         jwt:
           issuer-uri: ${ENTRA_ISSUER_URI:https://login.microsoftonline.com/${ENTRA_TENANT_ID}/v2.0}
           audiences: ${API_CLIENT_ID}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
   rabbitmq:
     addresses: ${RABBITMQ_ADDRESSES:localhost:5672}
     username: ${RABBITMQ_USER:pedidos360}
@@ -49,6 +51,8 @@ management:
       show-details: never
   # Persistencia por servicio
 app:
+  kafka:
+    enabled: ${KAFKA_ENABLED:true}
   messaging:
     enabled: true
   catalog-url: ${CATALOG_URL:http://localhost:8082}

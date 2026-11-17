@@ -27,6 +27,7 @@ class OrderControllerTest {
   @Autowired OrderRepository orders;
   @Autowired AuditRepository audit;
   @Autowired OutboxRepository outbox;
+  @Autowired StreamOutboxRepository streamOutbox;
   @Autowired OperatorRepository operators;
   @Autowired InventoryRepository inventory;
   @Autowired InventoryRecovery recovery;
@@ -40,6 +41,7 @@ class OrderControllerTest {
   @BeforeEach
   void setup() {
     inventory.deleteAll();
+    streamOutbox.deleteAll();
     outbox.deleteAll();
     audit.deleteAll();
     orders.deleteAll();
@@ -79,6 +81,53 @@ class OrderControllerTest {
   @Test
   void noToken401() throws Exception {
     mvc.perform(get("/api/orders")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void streamEventsCommitWithOrdersWithoutCustomerContactData() throws Exception {
+    long id = create();
+    assertEquals(1, streamOutbox.count());
+    var event = json.readTree(streamOutbox.findAll().getFirst().payload);
+    assertEquals("OrderCreated", event.path("type").asText());
+    assertEquals(id, event.path("payload").path("id").asLong());
+    assertEquals(1, event.path("payload").path("version").asLong());
+    assertFalse(event.path("payload").has("customerEmail"));
+    assertFalse(event.path("payload").has("deliveryAddress"));
+    var invalid = json.readTree(ORDER);
+    ((com.fasterxml.jackson.databind.node.ObjectNode) invalid.path("items").get(0)).put("quantity", 999);
+    mvc.perform(post("/api/orders").with(actor("ana", "Cliente"))
+        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(invalid)))
+        .andExpect(status().isConflict());
+    assertEquals(1, streamOutbox.count());
+  }
+
+  @Test
+  void failedKafkaPublishPreservesOrderAndBlocksLaterEventsUntilConfirmed() throws Exception {
+    long id = create();
+    mvc.perform(put("/api/orders/" + id).with(actor("ana", "Cliente"))
+        .contentType(MediaType.APPLICATION_JSON).content(ORDER)).andExpect(status().isOk());
+    assertEquals(2, streamOutbox.count());
+    var sender = mock(com.pedidos360.stream.EventPublisher.class);
+    doThrow(new java.io.IOException("offline")).when(sender).publish(anyString(), any());
+    var publisher = new StreamOutboxPublisher(streamOutbox, sender, json,
+        new org.springframework.transaction.support.TransactionTemplate(txManager));
+    publisher.publish();
+    assertEquals(1, orders.count());
+    assertEquals(2, streamOutbox.countByPublishedAtIsNull());
+    publisher.publish();
+    verify(sender, times(1)).publish(anyString(), any());
+    var first = streamOutbox.findAll().stream().filter(e -> e.eventVersion == 1).findFirst().orElseThrow();
+    first.nextAttempt = java.time.Instant.EPOCH;
+    streamOutbox.saveAndFlush(first);
+    doNothing().when(sender).publish(anyString(), any());
+    publisher.publish();
+    assertEquals(1, streamOutbox.countByPublishedAtIsNull());
+    publisher.publish();
+    assertEquals(0, streamOutbox.countByPublishedAtIsNull());
+    var order = org.mockito.ArgumentCaptor.forClass(com.pedidos360.stream.BusinessEvent.class);
+    verify(sender, times(3)).publish(eq("orders.events"), order.capture());
+    assertEquals(java.util.List.of(1L, 1L, 2L),
+        order.getAllValues().stream().map(e -> e.payload().version()).toList());
   }
 
   @Test

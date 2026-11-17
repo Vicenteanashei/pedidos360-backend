@@ -1,0 +1,39 @@
+server:
+  port: ${SERVER_PORT:8085}
+spring:
+  application:
+    name: ms-pedidos360-report
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${ENTRA_ISSUER_URI:https://login.microsoftonline.com/${ENTRA_TENANT_ID}/v2.0}
+          audiences: ${API_CLIENT_ID}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  datasource:
+    url: ${DB_URL:jdbc:h2:file:./data/report;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration/{vendor}
+management:
+  health:
+    rabbit:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+app:
+  kafka:
+    enabled: ${KAFKA_ENABLED:true}
+    consumer-concurrency: ${KAFKA_CONCURRENCY:3}
+

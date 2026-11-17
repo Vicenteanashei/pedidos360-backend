@@ -26,6 +26,7 @@ public class OrderService {
   private final OutboxRepository outbox;
   private final ObjectMapper json;
   private final InventoryRecovery inventory;
+  private final OrderEvents events;
 
   public OrderService(
       OrderRepository r,
@@ -34,7 +35,7 @@ public class OrderService {
       AuditRepository h,
       OutboxRepository o,
       ObjectMapper j,
-      InventoryRecovery inventory) {
+      InventoryRecovery inventory, OrderEvents events) {
     repository = r;
     access = a;
     catalog = c;
@@ -42,6 +43,7 @@ public class OrderService {
     outbox = o;
     json = j;
     this.inventory = inventory;
+    this.events = events;
   }
 
   @Transactional
@@ -230,6 +232,7 @@ public class OrderService {
     h.occurredAt = Instant.now();
     h.correlationId = MDC.get("correlationId");
     audit.save(h);
+    events.record(o, action, previous);
   }
 
   private void command(CustomerOrder o, String type) {

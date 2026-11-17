@@ -1,0 +1,22 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:report;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration/{vendor}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://issuer.example.test
+          audiences: test-api
+app:
+  kafka:
+    enabled: false
+  scheduling:
+    enabled: false
+

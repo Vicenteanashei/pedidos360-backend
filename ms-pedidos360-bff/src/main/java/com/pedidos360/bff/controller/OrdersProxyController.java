@@ -19,28 +19,18 @@ public class OrdersProxyController {
       @Value("${app.services.orders-url}") String orders,
       @Value("${app.services.catalog-url}") String catalog,
       @Value("${app.services.notify-url}") String notify,
-      @Value("${app.services.rabbit-admin-url}") String admin) {
+      @Value("${app.services.rabbit-admin-url}") String admin,
+      @Value("${app.services.report-url:http://localhost:8085}") String report,
+      @Value("${app.services.audit-url:http://localhost:8086}") String audit,
+      @Value("${app.services.kafka-admin-url:http://localhost:8087}") String kafka) {
     client = c;
     services =
-        Map.of(
-            "orders",
-            orders,
-            "audit",
-            orders,
-            "reports",
-            orders,
-            "operators",
-            orders,
-            "outbox",
-            orders,
-            "inventory-operations",
-            orders,
-            "catalog",
-            catalog,
-            "notifications",
-            notify,
-            "rabbit",
-            admin);
+        Map.ofEntries(
+            Map.entry("orders", orders), Map.entry("audit", audit),
+            Map.entry("reports", report), Map.entry("report", report),
+            Map.entry("operators", orders), Map.entry("outbox", orders),
+            Map.entry("inventory-operations", orders), Map.entry("catalog", catalog),
+            Map.entry("notifications", notify), Map.entry("rabbit", admin), Map.entry("kafka", kafka));
   }
 
   @RequestMapping(
@@ -50,7 +40,13 @@ public class OrdersProxyController {
         "/api/catalog/products",
         "/api/catalog/products/**",
         "/api/audit",
+        "/api/audit/**",
         "/api/reports",
+        "/api/reports/**",
+        "/api/report",
+        "/api/report/**",
+        "/api/kafka",
+        "/api/kafka/**",
         "/api/operators",
         "/api/operators/**",
         "/api/outbox",

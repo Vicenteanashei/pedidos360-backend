@@ -7,9 +7,12 @@ services:
       ORDERS_DB_PASSWORD: ${ORDERS_DB_PASSWORD:?Generate .env first}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Generate .env first}
       NOTIFY_DB_PASSWORD: ${NOTIFY_DB_PASSWORD:?Generate .env first}
+      REPORT_DB_PASSWORD: ${REPORT_DB_PASSWORD:?Generate .env first}
+      AUDIT_DB_PASSWORD: ${AUDIT_DB_PASSWORD:?Generate .env first}
     volumes:
       - oradata:/opt/oracle/oradata
       - ../oracle/01-users.sh:/container-entrypoint-initdb.d/01-users.sh:ro
+      - ../oracle/02-stream-users.sh:/container-entrypoint-initdb.d/02-stream-users.sh:ro
     healthcheck:
       test: [CMD, healthcheck.sh]
       interval: 10s
@@ -37,6 +40,7 @@ services:
       DB_PASSWORD: ${ORDERS_DB_PASSWORD:?Generate .env first}
       CATALOG_URL: http://catalog:8082
       REPORT_TIME_ZONE: ${REPORT_TIME_ZONE:-America/Santiago}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Configure Kafka private addresses}
     depends_on:
       oracle:
         condition: service_healthy
@@ -113,6 +117,9 @@ services:
       CATALOG_URL: http://catalog:8082
       NOTIFY_URL: http://notify:8083
       RABBIT_ADMIN_URL: http://rabbit-admin:8084
+      REPORT_URL: http://report:8085
+      AUDIT_URL: http://audit:8086
+      KAFKA_ADMIN_URL: http://kafka-admin:8087
     ports:
       - "${BFF_BIND_ADDRESS:-127.0.0.1}:8080:8080"
     restart: unless-stopped
@@ -133,6 +140,62 @@ services:
       RABBIT_ADMIN_USER: ${RABBIT_ADMIN_USER:-mqadmin}
       RABBIT_ADMIN_PASSWORD: ${RABBIT_ADMIN_PASSWORD:?Generate .env first}
       RABBIT_MANAGEMENT_URL: ${RABBIT_MANAGEMENT_URL:-http://rabbit1:15672}
+    restart: unless-stopped
+  report:
+    mem_limit: ${APP_MEMORY_LIMIT:-768m}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        MODULE: ms-pedidos360-report
+    environment:
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:?Configure your tenant}
+      API_CLIENT_ID: ${API_CLIENT_ID:?Configure your API registration}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Configure Kafka private addresses}
+      SERVER_PORT: 8085
+      DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+      DB_USERNAME: P360_REPORT
+      DB_PASSWORD: ${REPORT_DB_PASSWORD:?Generate .env first}
+      REPORT_TIME_ZONE: ${REPORT_TIME_ZONE:-America/Santiago}
+    depends_on:
+      oracle:
+        condition: service_healthy
+    restart: unless-stopped
+  audit:
+    mem_limit: ${APP_MEMORY_LIMIT:-768m}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        MODULE: ms-pedidos360-audit
+    environment:
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:?Configure your tenant}
+      API_CLIENT_ID: ${API_CLIENT_ID:?Configure your API registration}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Configure Kafka private addresses}
+      SERVER_PORT: 8086
+      DB_URL: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+      DB_USERNAME: P360_AUDIT
+      DB_PASSWORD: ${AUDIT_DB_PASSWORD:?Generate .env first}
+      REPORT_TIME_ZONE: ${REPORT_TIME_ZONE:-America/Santiago}
+    depends_on:
+      oracle:
+        condition: service_healthy
+    restart: unless-stopped
+  kafka-admin:
+    mem_limit: ${APP_MEMORY_LIMIT:-768m}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        MODULE: ms-pedidos360-kafka-admin
+    environment:
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:?Configure your tenant}
+      API_CLIENT_ID: ${API_CLIENT_ID:?Configure your API registration}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?Configure Kafka private addresses}
+      SERVER_PORT: 8087
     restart: unless-stopped
 volumes:
   oradata:

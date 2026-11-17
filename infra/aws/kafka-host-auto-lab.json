@@ -1,0 +1,155 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Pedidos360 EA3: host Kafka autoconfigurable (3 ZooKeeper + 3 brokers + Kafka UI en una EC2). Sin SSH ni llaves: el arranque despliega el cluster. Sin roles IAM.",
+  "Parameters": {
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "SubnetId": {
+      "Type": "AWS::EC2::Subnet::Id"
+    },
+    "BackendSecurityGroupId": {
+      "Type": "AWS::EC2::SecurityGroup::Id"
+    },
+    "SshSourceCidr": {
+      "Type": "String",
+      "Description": "CIDR IPv4 administrativo (opcional: el despliegue no usa SSH); nunca 0.0.0.0/0",
+      "AllowedPattern": "^(?!0\\.0\\.0\\.0/0$)([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+    },
+    "AmiId": {
+      "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+      "Default": "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "Default": "t3.large",
+      "AllowedValues": [
+        "t3.large",
+        "t3.xlarge",
+        "m6i.large",
+        "m6i.xlarge"
+      ]
+    },
+    "KafkaUiPassword": {
+      "Type": "String",
+      "NoEcho": true,
+      "MinLength": 16,
+      "MaxLength": 64,
+      "AllowedPattern": "^[A-Za-z0-9]+$",
+      "Description": "Clave de Kafka UI (usuario kafkaadmin). Solo letras y numeros, 16 a 64 caracteres."
+    }
+  },
+  "Resources": {
+    "KafkaSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Kafka private access from backend, SSH administration",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 9092,
+            "ToPort": 9094,
+            "SourceSecurityGroupId": {
+              "Ref": "BackendSecurityGroupId"
+            },
+            "Description": "Kafka listeners from app host"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": {
+              "Ref": "SshSourceCidr"
+            },
+            "Description": "Administrative access"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "pedidos360-ea3-kafka"
+          }
+        ]
+      }
+    },
+    "KafkaHost": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Ref": "AmiId"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "NetworkInterfaces": [
+          {
+            "DeviceIndex": "0",
+            "AssociatePublicIpAddress": true,
+            "SubnetId": {
+              "Ref": "SubnetId"
+            },
+            "GroupSet": [
+              {
+                "Ref": "KafkaSG"
+              }
+            ]
+          }
+        ],
+        "MetadataOptions": {
+          "HttpTokens": "required",
+          "HttpEndpoint": "enabled"
+        },
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "VolumeSize": 40,
+              "VolumeType": "gp3",
+              "Encrypted": true,
+              "DeleteOnTermination": true
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Sub": "#!/bin/bash\nset -euo pipefail\n# La consola serie es lentisima: solo las lineas [p360] van a ella; el detalle va a un archivo.\nexec 3> >(logger -t p360-kafka -s 2>/dev/console)\nsay() { echo \"[p360] $*\" >&3; echo \"[p360] $*\"; }\nexec >> /var/log/pedidos360-kafka-boot.log 2>&1\nsay \"inicio $(date -u +%FT%TZ)\"\ndnf install -y -q docker\nsay \"docker instalado\"\nsystemctl enable --now docker\nmkdir -p /usr/local/lib/docker/cli-plugins\ncurl -fsSL https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose\nchmod +x /usr/local/lib/docker/cli-plugins/docker-compose\nmkdir -p /opt/pedidos360/kafka\ncd /opt/pedidos360/kafka\necho 'H4sIAAAAAAACCu2ZXW+jOBSG7+dXWNFehnxAO6XeixUlbotKAGFntt3RyKLgtiiAESaZnY7631dAQiBJM5m0F7Od5gLB8evjcPz6wSGCZfPQZwJ+AOCR8yljKcuGxRUAYezdMwh8ntxFM5bkYeL3/VSqZfCkd9qTS+kDF3nixQw2kpQNMYtpFMZhDoGiHsVljCXzMONJzJK8GgiAf2z7CiEHuRQj9xNyqTGCYLjRqJsGsgh1bJdAIA/VTQUx9CtKjDGCQB4MBhvthmUQahpjg0Aw3GzGN5a+bD5+5rvh5k1CWVVVqKiq+mcdlLcFlVVwkfdKO7/S6CXSHGo7BEMgXcdiKKtxcfKvfPyxqtacR7O4mqDiI4HH6ZAGXu7B/tzL+lF4268H6RfxljDi99t0Eb+v5o15Uf7gPzB/uhwgZyKH4LM+HnWBP7vtgseplDEv+NYFnYj7XlTMNSyK3+mCznHny6JfmOQsm3tRUVexzBXGjM9yCNRlJGN5FjJRzM6H6lrkXpZDMEsiJoQkcp6mLGi6UX4NN8ovdqP87sbtbpT3daP8FtyovIYblRe7UXl343Y3Kvu6Ufkfu3Hq3U293U/pUrLVhVXndQeqp4uaBixlSSAoT5Z33ZhR8N3nSRDmIU8gENXegVaF+va0Lpd/Tq7sId+yPCqrnLn21dq2oWpoLBDbspBO2g4dqsNu05ytawU21lGVzjQwQVZpdMMiyLU0E/b7cHg6OJW76HoVKQKtntroE3KJgdHomSSLSd1I9cf3jQSXNiZQGsonvUFv0Bs+bY62HIJipE9cg9xQx7WJrdsmHWtOY1zH1Irza7Iasg61MpY9lnWu01tagZNltlYH+/wcI4IpsR1Dpy5yTEPXiGFb9FzTie2uIFbpiatZWNNLBSYaQdS0Lw7uNzYsamB39dyuxCN0rk1MskfaMoFVQm8hxuvJrMmYOppLjCINXk+gTYhNdRcV36isAabI0s5MBEHnzosE67TkE0s3kWZRE2kj5FJkouqWdvVZA2TBxRKQx0O5Wswpz/IGHjtLL50Z1ohqo5GLMN4wUnnobAdsZdI1xpbBFV9/AM5SLd1mfMoyyUtDac4yEfJEdIEk3XKeizzzUqlY/yxrgbVcGodCVVk+0Uqo0pRlIQ+KsNgHtvJLYCu/XdjKvwpslQNgKx8MW+Udtu+wfQ3YKuVhF2zl3w+2yktgq7xd2Cq/CmyPDoCtcjBsj95h+w7b14DtUXnYBVvl94OtFCZh/lPA3eTo4qfrPlBcbLz2lu7Dzo257PWLm5Jynoa+6IkHuH6d8VLr8zj2kgCCz7eeeOiCNdmXdv06Ce/UVZuFrZqlGZ8zP5+JyLsV/VoyH/ROehvb/9rEz1SympKt9+3zOI1YzgIqZr7PhLibRdGPHiG6OcEEuZgOFlRLWRAGXCgfB8/pzmybYOJqTv1er/V6orV9buJ9kU+bkEtKbhwEgWlfGBY9t93xog07rmFdrPA9wTVtl4t4YpRRWFnPC+IwedrV29Ew/tt2R60MdfAvnSd34f0sY+CqyAcmBkg9Ib7yLHjaCZOJ8TxPmiMV71wldaCqT1AdqIPOznXXcGv9V87ivHgjWb/ea7TIrfOmqtmitM6bqmXLh/8AwHLWuO8bAAA=' | base64 -d | gunzip > compose.yml\necho 'H4sIAAAAAAACCpVTy27bMBC86ysmjFAnqKnYchvUTtxLkwJFcigK39IcaGplEaFJlaTcCEX/vdDDihM0QOuLvMvlzuzs8PjorPLubK3MGZkd1sIXkacATpVFqUrKhdLR2trggxPl8kHkD2K6mM4n83TcBulhMOuCSDoSgU5O8SsCtJVCw4gtLVk8ZSitVrJesjhlcBTIBGXNksUzFgFtGx5sqaQH5wMy9+R25MDiIcXAeQcEzlXOjQ2cHpUPHt8jAOBdH7C4AW/KS+GCauA8ZuDcUamVFE2C50IG6zAb7kprcrUBk5qEqcqkpx13X3ZQMQyRbP0yHqKDkq0yiTK+NjLpMf0yjYBjXDeEldmgH1k4gixIPlB2gVAoDy+dKgMMNeNnpCmQRyaCgHXwSpMJuoYshNmQx759EgEZdXc7eU/+U9ru9ppeynjarEnlOMLGUQl+/QOjr3tdP9nKhAVmd3cLXwpJi/v7t9+eVP7cirzAbITLy0uw+IAia+Yl06pPsrBgqxa2RcW28gGF2BFmONiiMBkOtoj9Fi/gSFojlSbQY3Ougq4Tho9v0g7hUQVMIyBXg+u6Zf2LNkIHcuC8WXSoeahLwiBsn2xp7623N5XIsteMddc76378ip/Gf3URi373zw3WZeR8QjsywfdWwfnk3YdJ84uOcUM1lmjPv2RjlI6a8Vr3FYS80hqF8sG6GpXJyEHabSlkS2UPIqpMhSSoLWllCKO+ZNzBjZC+n6eTDjC3rlMFyjwn1/C3LiRXt6sXB137Jv8c6OnP1e3qApmNgJ4Ri1sQtp94mk7m5x2DzBqKWjONbpoVN3Sstpt6/8YWCD8t1pVXhrwfHqHJEApHBGmNr7bkuC9JqlxJXN2ufDKKoj9e9YCWOgUAAA==' | base64 -d | gunzip > init-topics.sh\nTOKEN=$(curl -fsSX PUT http://169.254.169.254/latest/api/token -H \"X-aws-ec2-metadata-token-ttl-seconds: 300\")\nIP=$(curl -fs -H \"X-aws-ec2-metadata-token: $TOKEN\" http://169.254.169.254/latest/meta-data/local-ipv4)\nsay \"IP privada $IP\"\numask 077\ncat > kafka.env <<EOF\nKAFKA_ADVERTISED_HOST=$IP\nKAFKA_BIND_ADDRESS=$IP\nKAFKA_UI_BIND_ADDRESS=127.0.0.1\nKAFKA_UI_USER=kafkaadmin\nKAFKA_UI_PASSWORD=${KafkaUiPassword}\nEOF\nsay \"descargando imagenes y levantando el cluster\"\ndocker compose --env-file kafka.env -p pedidos360-ea3-kafka -f compose.yml up -d --quiet-pull || say \"compose up termino con error (ver /var/log/pedidos360-kafka-boot.log)\"\nstate=none\nfor i in $(seq 1 90); do\n  state=$(docker inspect -f \"{{.State.Status}} {{.State.ExitCode}}\" pedidos360-ea3-kafka-kafka-init-1 2>/dev/null || echo none)\n  [ \"$state\" = \"exited 0\" ] && break\n  sleep 10\ndone\nsay \"kafka-init: $state\"\ndocker ps --format \"{{.Names}} {{.Status}}\" | while IFS= read -r l; do say \"$l\"; done || true\ndocker exec pedidos360-ea3-kafka-kafka1-1 kafka-topics --bootstrap-server localhost:19092 --describe | grep \"^Topic:\" | while IFS= read -r l; do say \"$l\"; done || true\nsay \"LISTO $(date -u +%FT%TZ)\"\n"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "pedidos360-ea3-kafka"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "KafkaInstanceId": {
+      "Value": {
+        "Ref": "KafkaHost"
+      }
+    },
+    "KafkaPrivateIp": {
+      "Value": {
+        "Fn::GetAtt": [
+          "KafkaHost",
+          "PrivateIp"
+        ]
+      }
+    },
+    "KafkaSecurityGroupId": {
+      "Value": {
+        "Ref": "KafkaSG"
+      }
+    },
+    "KafkaBootstrapServers": {
+      "Value": {
+        "Fn::Sub": "${KafkaHost.PrivateIp}:9092,${KafkaHost.PrivateIp}:9093,${KafkaHost.PrivateIp}:9094"
+      }
+    }
+  }
+}

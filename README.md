@@ -4,6 +4,8 @@ Backend Java 21 y Spring Boot para gestión de pedidos, catálogo, stock, notifi
 
 ## Componentes
 
+La integración de streaming EA3, sus nuevos servicios y el procedimiento de actualización se documentan en [EA3 Kafka](docs/EA3-KAFKA.md). Report y Audit ahora tienen proyecciones Kafka propias; el BFF conserva las rutas de consulta existentes. Kafka Admin y Kafka UI permiten administrar el clúster.
+
 - BFF: entrada de la API y comunicación con los microservicios.
 - Orders: pedidos, estados, reservas de stock, outbox, reportes y auditoría.
 - Catalog: productos, existencias y operaciones de inventario.

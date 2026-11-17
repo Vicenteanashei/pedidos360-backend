@@ -45,3 +45,6 @@ app:
     catalog-url: ${CATALOG_URL:http://localhost:8082}
     notify-url: ${NOTIFY_URL:http://localhost:8083}
     rabbit-admin-url: ${RABBIT_ADMIN_URL:http://localhost:8084}
+    report-url: ${REPORT_URL:http://localhost:8085}
+    audit-url: ${AUDIT_URL:http://localhost:8086}
+    kafka-admin-url: ${KAFKA_ADMIN_URL:http://localhost:8087}

@@ -23,6 +23,9 @@ public class CustomerOrder {
 
   @Version private Long version;
 
+  @Column(nullable = false)
+  private long streamVersion;
+
   @Column(length = 80)
   private String reservationId;
 

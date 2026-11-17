@@ -2,7 +2,7 @@
 # Offline volume backup for one deployment host; never deletes a volume or restores over it.
 set -euo pipefail
 role="${1:-}"
-case "$role" in backend) config=infra/backend/compose.yml; project=pedidos360-ea2-backend;; rabbit) config=infra/mq/compose.yml; project=pedidos360-ea2-mq;; *) echo 'Uso: bash scripts/backup-host.sh backend|rabbit DIRECTORIO_DESTINO [archivo.env]' >&2; exit 2;; esac
+case "$role" in kafka) config=infra/kafka/compose.yml; project=pedidos360-ea3-kafka;; backend) config=infra/backend/compose.yml; project=pedidos360-ea2-backend;; rabbit) config=infra/mq/compose.yml; project=pedidos360-ea2-mq;; *) echo 'Uso: bash scripts/backup-host.sh backend|rabbit|kafka DIRECTORIO_DESTINO [archivo.env]' >&2; exit 2;; esac
 [[ $# -ge 2 ]] || exit 2
 destination="$(realpath -m -- "$2")"
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."

@@ -1,0 +1,29 @@
+server:
+  port: ${SERVER_PORT:8087}
+spring:
+  application:
+    name: ms-pedidos360-kafka-admin
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${ENTRA_ISSUER_URI:https://login.microsoftonline.com/${ENTRA_TENANT_ID}/v2.0}
+          audiences: ${API_CLIENT_ID}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+management:
+  health:
+    rabbit:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+app:
+  kafka:
+    enabled: ${KAFKA_ENABLED:true}
+    consumer-concurrency: ${KAFKA_CONCURRENCY:3}
+
