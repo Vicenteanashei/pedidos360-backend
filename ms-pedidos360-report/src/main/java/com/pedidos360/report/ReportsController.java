@@ -30,8 +30,12 @@ public class ReportsController {
     var result = new LinkedHashMap<String, Object>();
     result.put("timeZone", zone.getId()); result.put("deliveredOrders", totals.getOrders());
     result.put("sales", totals.getSales()); result.put("averageLeadTimeMs", totals.getLead());
-    result.put("dailySales", orders.daily(since).stream()
+    var daily = orders.daily(since);
+    result.put("dailySales", daily.stream()
         .map(e -> Map.of("label", e.getLabel(), "value", e.getValue())).toList());
+    result.put("dailyLeadTime", daily.stream()
+        .filter(e -> e.getLeadTimeMs() != null)
+        .map(e -> Map.of("label", e.getLabel(), "value", e.getLeadTimeMs())).toList());
     result.put("hourlySales", orders.hourly(since).stream()
         .map(e -> Map.of("label", e.getLabel(), "value", e.getValue())).toList());
     result.put("topProducts", orders.products(since, PageRequest.of(0, 20)).stream()

@@ -128,6 +128,15 @@ public class KafkaPlatformService {
     await(admin.deleteTopics(List.of(topic)).all());
   }
 
+  public void resetConfiguration(String topic, String property) {
+    demo(topic);
+    if (!Set.of("retention.ms", "cleanup.policy").contains(property))
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Configuración no modificable");
+    var resource = new ConfigResource(ConfigResource.Type.TOPIC, topic);
+    var operation = new AlterConfigOp(new ConfigEntry(property, null), AlterConfigOp.OpType.DELETE);
+    await(admin.incrementalAlterConfigs(Map.of(resource, List.of(operation))).all());
+  }
+
   public List<String> groups() {
     return await(admin.listConsumerGroups().all()).stream().map(ConsumerGroupListing::groupId)
         .filter(id -> id.startsWith("p360-") || id.startsWith("demo.")).sorted().toList();
@@ -158,6 +167,9 @@ public class KafkaPlatformService {
     var description = await(admin.describeConsumerGroups(List.of(group)).all()).get(group);
     if (!description.members().isEmpty())
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Detén el grupo antes de cambiar offsets");
+    var topic = await(admin.describeTopics(List.of(input.topic())).allTopicNames()).get(input.topic());
+    if (input.partition() >= topic.partitions().size())
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Partición inexistente");
     var partition = new TopicPartition(input.topic(), input.partition());
     long earliest = await(admin.listOffsets(Map.of(partition, OffsetSpec.earliest())).all()).get(partition).offset();
     long end = await(admin.listOffsets(Map.of(partition, OffsetSpec.latest())).all()).get(partition).offset();

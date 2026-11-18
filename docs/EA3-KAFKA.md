@@ -125,6 +125,7 @@ Todas las rutas API siguen requiriendo scope access_as_user y JWT con issuer/aud
 - Admin/Auditor: GET /api/audit?page=0&size=100&orderId=...&actorId=...&type=...&from=...&to=....
 - Admin: GET /api/kafka/cluster y /api/kafka/topics.
 - Admin: GET/PUT /api/kafka/topics/{topic}/config.
+- Admin: DELETE /api/kafka/topics/{topic}/config/{property} para restablecer `retention.ms` o `cleanup.policy` al valor del broker en tópicos `demo.*`.
 - Admin: POST /api/kafka/topics; DELETE /api/kafka/topics/{topic}.
 - Admin: GET /api/kafka/groups y /api/kafka/groups/{group}.
 - Admin: POST /api/kafka/groups/{group}/offsets.
@@ -132,6 +133,8 @@ Todas las rutas API siguen requiriendo scope access_as_user y JWT con issuer/aud
 Crear/eliminar tópicos desde el microservicio se limita a demo.*. Los tópicos de negocio/DLT están protegidos contra borrado y cambios incompatibles con la topología. Se pueden cambiar retenciones dentro de límites. Los grupos administrables son p360-* y demo.*; cambiar offsets exige ausencia de miembros activos y valores dentro del log retenido. Adelantar un offset omite eventos; retroceder puede reprocesarlos.
 
 Kafka UI es independiente del microservicio administrador; mostrar ambos durante la evaluación.
+
+Las plantillas `infra/aws/web-sin-cloudfront-lab.json` y `infra/aws/web-existente-lab.json` dirigen las rutas EA3 al BFF con el autorizador de Entra y el scope `access_as_user`. En un stack existente, aplicar la actualización con la misma variante y conservar sus parámetros. Validar `GET /api/kafka/topics` a través de API Gateway con tokens de Admin y Auditor, y sin token. Los resultados esperados son JSON con 200, 403 y 401 respectivamente.
 
 ## Verificación reproducible
 
@@ -165,7 +168,7 @@ El broker embebido usa RF=1 para probar integración sin Docker. No acredita el 
 5. Detener Audit o Report, producir eventos, observar lag y recuperación sin duplicados.
 6. KAFKA_CONCURRENCY=1 en el .env del backend y dos/tres instancias de Report para mostrar reparto/rebalanceo; no publicar puertos adicionales del servicio.
 7. Evento inválido a DLT y continuación del siguiente evento válido.
-8. Crear, modificar e inspeccionar demo.* por API; demostrar protección de tópicos del caso.
+8. Crear un tópico `demo.*`, modificar su configuración, restablecerla al valor del broker y borrar el tópico. Demostrar la protección de los tópicos del caso.
 9. Mostrar Kafka UI (acceso temporal restringido a la IP del presentador, descrito en la sección «Host Kafka en AWS»).
 10. Confirmar que Rabbit, DLQ, notificaciones, stock y roles anteriores siguen funcionando.
 

@@ -17,14 +17,17 @@ public interface ReportRepository extends JpaRepository<ReportOrder, Long> {
     String getLabel();
     java.math.BigDecimal getValue();
   }
+  interface DailyBucket extends Bucket {
+    Double getLeadTimeMs();
+  }
   interface ProductTotal {
     Long getProductId();
     Long getQuantity();
   }
   @Query("select count(o) as orders, coalesce(sum(o.total),0) as sales, coalesce(avg(o.leadTimeMs),0) as lead from ReportOrder o where o.deleted=false and o.status='ENTREGADO' and o.deliveredAt>=:since")
   Totals totals(Instant since);
-  @Query("select o.salesDay as label, sum(o.total) as value from ReportOrder o where o.deleted=false and o.status='ENTREGADO' and o.deliveredAt>=:since group by o.salesDay order by o.salesDay")
-  List<Bucket> daily(Instant since);
+  @Query("select o.salesDay as label, sum(o.total) as value, avg(o.leadTimeMs) as leadTimeMs from ReportOrder o where o.deleted=false and o.status='ENTREGADO' and o.deliveredAt>=:since group by o.salesDay order by o.salesDay")
+  List<DailyBucket> daily(Instant since);
   @Query("select o.salesHour as label, sum(o.total) as value from ReportOrder o where o.deleted=false and o.status='ENTREGADO' and o.deliveredAt>=:since group by o.salesHour order by o.salesHour")
   List<Bucket> hourly(Instant since);
   @Query("select l.productId as productId, sum(l.quantity) as quantity from ReportOrder o join o.items l where o.deleted=false and o.status='ENTREGADO' and o.deliveredAt>=:since group by l.productId order by sum(l.quantity) desc")

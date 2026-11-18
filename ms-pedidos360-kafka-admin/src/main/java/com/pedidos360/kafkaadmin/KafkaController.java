@@ -32,6 +32,10 @@ public class KafkaController {
   public void create(@Valid @RequestBody TopicInput input) { service.create(input); }
   @PutMapping("/topics/{topic}/config") @ResponseStatus(HttpStatus.NO_CONTENT)
   public void update(@PathVariable String topic, @Valid @RequestBody TopicChange input) { service.update(topic, input); }
+  @DeleteMapping("/topics/{topic}/config/{property}") @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void resetConfiguration(@PathVariable String topic, @PathVariable String property) {
+    service.resetConfiguration(topic, property);
+  }
   @DeleteMapping("/topics/{topic}") @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(@PathVariable String topic) { service.delete(topic); }
   @GetMapping("/groups") public List<String> groups() { return service.groups(); }

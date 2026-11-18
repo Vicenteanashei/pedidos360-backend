@@ -658,6 +658,204 @@
         ]
       }
     },
+    "KafkaClusterRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "GET /api/kafka/cluster",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "KafkaTopicsRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "GET /api/kafka/topics",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "KafkaTopicConfigRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "GET /api/kafka/topics/{topic}/config",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "KafkaCreateTopicRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "POST /api/kafka/topics",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "KafkaUpdateTopicConfigRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "PUT /api/kafka/topics/{topic}/config",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "KafkaResetTopicConfigRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "DELETE /api/kafka/topics/{topic}/config/{property}",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "KafkaDeleteTopicRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "DELETE /api/kafka/topics/{topic}",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "KafkaGroupsRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "GET /api/kafka/groups",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "KafkaGroupRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "GET /api/kafka/groups/{group}",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "KafkaResetGroupOffsetsRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "POST /api/kafka/groups/{group}/offsets",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "AuditTimelineRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "GET /api/audit/timeline",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "ReportRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "GET /api/report",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "ReportKpisRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "GET /api/report/kpis",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "ReportTopProductsRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "GET /api/report/top-products",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "ReportsKpisRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "GET /api/reports/kpis",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "ReportsTopProductsRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "GET /api/reports/top-products",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "StreamOutboxRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "GET /api/outbox/stream",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
+    "StreamReplayRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": { "Ref": "HttpApi" },
+        "RouteKey": "POST /api/outbox/stream/replay",
+        "Target": { "Fn::Join": ["/", ["integrations", { "Ref": "BffIntegration" }]] },
+        "AuthorizationType": "JWT",
+        "AuthorizerId": { "Ref": "EntraAuthorizer" },
+        "AuthorizationScopes": ["access_as_user"]
+      }
+    },
     "Route15": {
       "Type": "AWS::ApiGatewayV2::Route",
       "Properties": {

@@ -13,7 +13,6 @@ import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.*;
 import org.springframework.kafka.listener.*;
-import org.springframework.kafka.support.TopicPartitionOffset;
 import org.springframework.kafka.support.serializer.*;
 import org.springframework.util.backoff.FixedBackOff;
 
@@ -63,8 +62,12 @@ public class StreamConfiguration {
       @org.springframework.beans.factory.annotation.Value("${app.kafka.consumer-concurrency:3}") int concurrency) {
     var recoverer = new DeadLetterPublishingRecoverer(template, (record, error) -> {
       String group = KafkaUtilsGroup.current();
-      String suffix = group.equals("p360-report") ? "report" :
-          group.equals("p360-audit-ingest") ? "audit" : "timeline";
+      String suffix = switch (group) {
+        case "p360-report" -> "report";
+        case "p360-audit-ingest" -> "audit";
+        case "p360-audit-timeline" -> "timeline";
+        default -> throw new IllegalStateException("Grupo Kafka sin tópico DLT configurado: " + group);
+      };
       return new org.apache.kafka.common.TopicPartition(record.topic() + "." + suffix + ".DLT", record.partition());
     });
     recoverer.setFailIfSendResultIsError(true);

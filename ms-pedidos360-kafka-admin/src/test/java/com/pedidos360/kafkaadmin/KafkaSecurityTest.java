@@ -27,8 +27,16 @@ class KafkaSecurityTest {
     for (String role : List.of("Cliente", "Operador", "Auditor")) {
       mvc.perform(get("/api/kafka/topics").with(actor(role))).andExpect(status().isForbidden());
       mvc.perform(delete("/api/kafka/topics/demo.test").with(actor(role))).andExpect(status().isForbidden());
+      mvc.perform(delete("/api/kafka/topics/demo.test/config/retention.ms").with(actor(role)))
+          .andExpect(status().isForbidden());
     }
     verifyNoInteractions(service);
+  }
+
+  @Test void adminsCanRemoveAConfigurationOverride() throws Exception {
+    mvc.perform(delete("/api/kafka/topics/demo.test/config/retention.ms").with(actor("Admin")))
+        .andExpect(status().isNoContent());
+    verify(service).resetConfiguration("demo.test", "retention.ms");
   }
   @Test void invalidTopicConfigurationFailsBeforeBrokerAccess() throws Exception {
     for (String input : List.of(

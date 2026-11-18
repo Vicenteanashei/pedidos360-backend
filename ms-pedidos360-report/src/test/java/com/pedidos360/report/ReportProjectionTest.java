@@ -43,6 +43,8 @@ class ReportProjectionTest {
         .andExpect(status().isOk()).andExpect(jsonPath("$.deliveredOrders").value(1))
         .andExpect(jsonPath("$.sales").value(4400))
         .andExpect(jsonPath("$.averageLeadTimeMs").value(3600000))
+        .andExpect(jsonPath("$.dailyLeadTime[0].label").value("2026-10-01"))
+        .andExpect(jsonPath("$.dailyLeadTime[0].value").value(3600000))
         .andExpect(jsonPath("$.topProducts[0].value").value(2))
         .andExpect(jsonPath("$.streaming").value(true));
   }
